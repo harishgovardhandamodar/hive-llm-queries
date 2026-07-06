@@ -830,15 +830,27 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
 }
 .cluster-graph-container {
-  height: 340px;
+  flex: 1;
+  min-height: 200px;
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   background: var(--bg-primary);
   position: relative;
 }
 .cluster-graph-container svg { width: 100%; height: 100%; }
+.cluster-pairs-panel {
+  max-height: 35vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+}
+.cluster-pairs-panel .cluster-pair {
+  background: var(--bg-primary);
+}
 .cluster-kg-btn {
   margin-left: auto;
   font-size: 11px;
@@ -1484,7 +1496,7 @@ function renderOverviewGraph(svgNode) {
   simulations['overview'] = sim;
 
   const link = g.append('g').selectAll('line').data(links).join('line')
-    .attr('stroke', 'var(--border)').attr('stroke-width', 1).attr('stroke-opacity', 0.4);
+    .attr('stroke', 'var(--text-muted)').attr('stroke-width', 1.5).attr('stroke-opacity', 0.5);
 
   const node = g.append('g').selectAll('circle').data(nodes).join('circle')
     .attr('r', d => d.r).attr('fill', d => getNodeColor(d))
@@ -1723,7 +1735,7 @@ function renderSGOverview(data, viewport, w, h) {
     .force('collision', d3.forceCollide().radius(d => d.r + 12));
 
   g.append('g').selectAll('line').data(links).join('line')
-    .attr('stroke', 'var(--border)').attr('stroke-width', 1.5).attr('stroke-opacity', 0.4);
+    .attr('stroke', 'var(--text-muted)').attr('stroke-width', 1.5).attr('stroke-opacity', 0.5);
 
   g.append('g').selectAll('circle').data(nodes).join('circle')
     .attr('r', d => d.r).attr('fill', d => getNodeColor(d))
@@ -1896,7 +1908,7 @@ function renderSGIntent(data, viewport, w, h) {
     .force('collision', d3.forceCollide().radius(d => d.r + 10));
 
   g.append('g').selectAll('line').data(links).join('line')
-    .attr('stroke', col).attr('stroke-width', 1.5).attr('stroke-opacity', 0.4);
+    .attr('stroke', col).attr('stroke-width', 1.5).attr('stroke-opacity', 0.5);
 
   g.append('g').selectAll('circle').data(allNodes).join('circle')
     .attr('r', d => d.r).attr('fill', d => getNodeColor(d))
@@ -2021,7 +2033,7 @@ function renderSGSubIntents(data, viewport, w, h) {
     .force('collision', d3.forceCollide().radius(d => d.r + 12));
 
   g.append('g').selectAll('line').data(links).join('line')
-    .attr('stroke', col).attr('stroke-width', 2).attr('stroke-opacity', 0.4);
+    .attr('stroke', col).attr('stroke-width', 2).attr('stroke-opacity', 0.5);
 
   g.append('g').selectAll('circle').data(allNodes).join('circle')
     .attr('r', d => d.r).attr('fill', d => getNodeColor(d))
@@ -2180,8 +2192,8 @@ function renderSGTimeline(data, viewport, w, h) {
     if (src && tgt) {
       linkG.append('path')
         .attr('d', 'M' + src.x + ',' + src.y + ' C' + ((src.x+tgt.x)/2) + ',' + src.y + ' ' + ((src.x+tgt.x)/2) + ',' + tgt.y + ' ' + tgt.x + ',' + tgt.y)
-        .attr('stroke', tgt._color || 'var(--border)').attr('stroke-width', 1.2)
-        .attr('fill', 'none').attr('stroke-opacity', 0.35);
+        .attr('stroke', tgt._color || 'var(--text-muted)').attr('stroke-width', 1.2)
+        .attr('fill', 'none').attr('stroke-opacity', 0.5);
     }
   }
 
@@ -2805,7 +2817,9 @@ function renderClusterExpanded(viewport) {
     '<span class="cluster-color-dot" style="background:' + col + ';width:12px;height:12px;"></span>' +
     '<span class="cluster-expanded-label">' + esc(cl.label) + '</span>' +
     '<span class="cluster-expanded-meta">' + cl.size + ' Q&A pairs from ' + cl.conversation_count + ' conversations</span>' +
-    '<button class="cluster-kg-btn" id="cluster-kg-toggle" onclick="toggleClusterKG(\'' + cl.id + '\')">\u2699 Knowledge Graph</button>';
+    '<button class="cluster-kg-btn" id="cluster-kg-toggle" onclick="toggleClusterKG(\'' + cl.id + '\')">\u2699 Knowledge Graph</button>' +
+    '<button class="cluster-kg-btn" id="cluster-hive-toggle" onclick="toggleClusterKGMode()" style="margin-left:4px;display:none">\u2B21 Hive</button>' +
+    '<button class="cluster-kg-btn" id="cluster-pairs-toggle" onclick="toggleClusterPairs()" style="margin-left:4px">Q&amp;A \u25B2</button>';
   viewport.appendChild(header);
 
   var graphDiv = document.createElement('div');
@@ -2815,7 +2829,7 @@ function renderClusterExpanded(viewport) {
   setTimeout(function() { renderClusterMiniGraph(graphDiv, cl, col); }, 50);
 
   var pairsContainer = document.createElement('div');
-  pairsContainer.style.cssText = 'overflow-y:auto;flex:1;padding:0 16px 16px;';
+  pairsContainer.className = 'cluster-pairs-panel';
 
   var items = cl.items || [];
   for (var pi = 0; pi < items.length; pi++) {
@@ -2856,9 +2870,10 @@ function renderClusterExpanded(viewport) {
 }
 
 function renderClusterMiniGraph(container, cluster, color) {
-  var w = container.clientWidth || 600;
-  var h = container.clientHeight || 340;
-  var svg = d3.select(container).append('svg').attr('width', w).attr('height', h);
+  var vbW = 800, vbH = 600;
+  var svg = d3.select(container).append('svg')
+    .attr('viewBox', '0 0 ' + vbW + ' ' + vbH)
+    .attr('preserveAspectRatio', 'xMidYMid meet');
   var g = svg.append('g');
   var zoom = d3.zoom().scaleExtent([0.3, 3]).on('zoom', function(ev) { g.attr('transform', ev.transform); });
   svg.call(zoom);
@@ -2897,11 +2912,11 @@ function renderClusterMiniGraph(container, cluster, color) {
   var sim = d3.forceSimulation(nodes)
     .force('link', d3.forceLink(links).id(function(d) { return d.id; }).distance(60))
     .force('charge', d3.forceManyBody().strength(-120))
-    .force('center', d3.forceCenter(w / 2, h / 2))
+    .force('center', d3.forceCenter(vbW / 2, vbH / 2))
     .force('collision', d3.forceCollide().radius(function(d) { return d.r + 6; }));
 
   g.append('g').selectAll('line').data(links).join('line')
-    .attr('stroke', 'var(--border)').attr('stroke-width', 1).attr('stroke-opacity', 0.3);
+    .attr('stroke', 'var(--text-muted)').attr('stroke-width', 1.5).attr('stroke-opacity', 0.5);
 
   g.append('g').selectAll('circle').data(nodes).join('circle')
     .attr('r', function(d) { return d.r; })
@@ -2947,6 +2962,12 @@ function renderClusterMiniGraph(container, cluster, color) {
 var clusterKgCache = {};
 var clusterKgView = false;
 var currentClKGId = null;
+var _clusterKgMode = 'graph'; // 'graph' | 'hive'
+var _clusterSim = null;
+
+function stopClusterSim() {
+  if (_clusterSim) { _clusterSim.stop(); _clusterSim = null; }
+}
 
 function toggleClusterKG(clusterId) {
   var btn = document.getElementById('cluster-kg-toggle');
@@ -2955,6 +2976,8 @@ function toggleClusterKG(clusterId) {
     currentClKGId = null;
     btn.classList.remove('active');
     btn.textContent = '\u2699 Knowledge Graph';
+    var hiveBtn = document.getElementById('cluster-hive-toggle');
+    if (hiveBtn) { hiveBtn.style.display = 'none'; }
     // Re-render mini graph
     var cl = null;
     for (var i = 0; i < clusterData.clusters.length; i++) {
@@ -2963,6 +2986,7 @@ function toggleClusterKG(clusterId) {
     if (cl) {
       var container = document.querySelector('.cluster-graph-container');
       if (container) {
+        stopClusterSim();
         container.innerHTML = '';
         var col = clusterColor(clusterData.clusters.indexOf(cl));
         renderClusterMiniGraph(container, cl, col);
@@ -2973,14 +2997,20 @@ function toggleClusterKG(clusterId) {
 
   clusterKgView = true;
   currentClKGId = clusterId;
+  _clusterKgMode = 'graph';
   btn.classList.add('active');
   btn.textContent = '\u2699 Graph';
+
+  var hiveBtn = document.getElementById('cluster-hive-toggle');
+  if (hiveBtn) { hiveBtn.style.display = ''; }
 
   var container = document.querySelector('.cluster-graph-container');
   if (!container) return;
 
   if (clusterKgCache[clusterId]) {
-    renderClusterKG(container, clusterKgCache[clusterId]);
+    stopClusterSim();
+    container.innerHTML = '';
+    renderClusterKG(container, JSON.parse(JSON.stringify(clusterKgCache[clusterId])));
     return;
   }
 
@@ -2990,7 +3020,7 @@ function toggleClusterKG(clusterId) {
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data && data.nodes && data.nodes.length > 0) {
-        clusterKgCache[clusterId] = data;
+        clusterKgCache[clusterId] = JSON.parse(JSON.stringify(data));
         container.innerHTML = '';
         renderClusterKG(container, data);
       } else {
@@ -3002,17 +3032,139 @@ function toggleClusterKG(clusterId) {
     });
 }
 
-function renderClusterKG(container, data) {
-  var w = container.clientWidth || 600;
-  var h = container.clientHeight || 340;
-  var margin = 50;
-  var innerR = 30;
-  var outerR = Math.min(w, h) / 2 - margin;
+function toggleClusterKGMode() {
+  var container = document.querySelector('.cluster-graph-container');
+  if (!container || !currentClKGId) return;
+  var data = clusterKgCache[currentClKGId];
+  if (!data) return;
 
-  // Group nodes by type
+  _clusterKgMode = _clusterKgMode === 'graph' ? 'hive' : 'graph';
+  var btn = document.getElementById('cluster-hive-toggle');
+  if (btn) { btn.textContent = _clusterKgMode === 'hive' ? '\u2302 Graph' : '\u2B21 Hive'; }
+  stopClusterSim();
+  container.innerHTML = '';
+  var fresh = JSON.parse(JSON.stringify(data));
+  if (_clusterKgMode === 'graph') {
+    renderClusterKG(container, fresh);
+  } else {
+    renderClusterHive(container, fresh);
+  }
+}
+
+function toggleClusterPairs() {
+  var panel = document.querySelector('.cluster-pairs-panel');
+  var btn = document.getElementById('cluster-pairs-toggle');
+  if (!panel || !btn) return;
+  var hidden = panel.style.display === 'none';
+  panel.style.display = hidden ? '' : 'none';
+  btn.textContent = hidden ? 'Q&A \u25B2' : 'Q&A \u25BC';
+}
+
+// ── Force-directed Knowledge Graph ───────────────────────────────────
+function renderClusterKG(container, data) {
+  var vbW = 800, vbH = 600;
+
+  function entityType(n) { return n.concept_type || n.type || 'concept'; }
+
+  var typeColors = {
+    'topic': '#3fb950', 'concept': '#d29922',
+    'technical_term': '#f0883e', 'acronym': '#a371f7',
+  };
+  function typeColor(t) { return typeColors[t] || 'var(--text-muted)'; }
+
+  // Compute node radii
+  var maxFreq = 1;
+  data.nodes.forEach(function(n) { if ((n.frequency || 1) > maxFreq) maxFreq = n.frequency || 1; });
+  data.nodes.forEach(function(n) { n._r = 5 + ((n.frequency || 1) / maxFreq) * 12; });
+
+  // Build SVG
+  var svg = d3.select(container).append('svg')
+    .attr('viewBox', '0 0 ' + vbW + ' ' + vbH)
+    .attr('preserveAspectRatio', 'xMidYMid meet');
+  var g = svg.append('g');
+
+  var zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', function(ev) {
+    g.attr('transform', ev.transform);
+  });
+  svg.call(zoom);
+
+  // Link group — bind data
+  var linkGroup = g.append('g').attr('stroke', 'var(--text-muted)').attr('stroke-opacity', 0.5);
+  var link = linkGroup.selectAll('line').data(data.links).join('line')
+    .attr('stroke-width', 1.5);
+
+  // Node group — bind data
+  var nodeGroup = g.append('g');
+  var tooltip = null;
+  var node = nodeGroup.selectAll('circle').data(data.nodes).join('circle')
+    .attr('fill', function(d) { return typeColor(entityType(d)); })
+    .attr('stroke', 'var(--bg-primary)')
+    .attr('stroke-width', 1.5)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(ev, d) {
+      if (tooltip) tooltip.remove();
+      tooltip = document.createElement('div');
+      tooltip.className = 'cluster-hive-tooltip';
+      tooltip.innerHTML = '<strong>' + esc(d.label || d.title || '') + '</strong>' +
+        '<br><span style="color:' + typeColor(entityType(d)) + '">' + entityType(d) + '</span>' +
+        '<br>frequency: ' + (d.frequency || 1);
+      document.body.appendChild(tooltip);
+      var rect = tooltip.getBoundingClientRect();
+      tooltip.style.left = (ev.clientX - rect.width / 2) + 'px';
+      tooltip.style.top = (ev.clientY - rect.height - 12) + 'px';
+    })
+    .on('mousemove', function(ev) {
+      if (!tooltip) return;
+      var rect = tooltip.getBoundingClientRect();
+      tooltip.style.left = (ev.clientX - rect.width / 2) + 'px';
+      tooltip.style.top = (ev.clientY - rect.height - 12) + 'px';
+    })
+    .on('mouseleave', function() {
+      if (tooltip) { tooltip.remove(); tooltip = null; }
+    });
+
+  var label = nodeGroup.selectAll('text').data(data.nodes).join('text')
+    .attr('text-anchor', 'middle')
+    .attr('dy', '0.35em')
+    .attr('fill', 'var(--text-muted)')
+    .attr('font-size', function(d) { return Math.max(7, Math.min(11, d._r * 0.7)); })
+    .style('pointer-events', 'none')
+    .text(function(d) { return (d.label || d.title || '').length > 14 ? (d.label || d.title || '').slice(0, 12) + '..' : (d.label || d.title || ''); });
+
+  // Force simulation
+  stopClusterSim();
+  _clusterSim = d3.forceSimulation(data.nodes)
+    .force('link', d3.forceLink(data.links).id(function(d) { return d.id; }).distance(80).strength(0.3))
+    .force('charge', d3.forceManyBody().strength(-200))
+    .force('center', d3.forceCenter(vbW / 2, vbH / 2))
+    .force('collision', d3.forceCollide().radius(function(d) { return d._r + 8; }));
+
+  _clusterSim.on('tick', function() {
+    link.attr('x1', function(d) { return d.source.x; })
+        .attr('y1', function(d) { return d.source.y; })
+        .attr('x2', function(d) { return d.target.x; })
+        .attr('y2', function(d) { return d.target.y; });
+    node.attr('cx', function(d) { return d.x; })
+        .attr('cy', function(d) { return d.y; })
+        .attr('r', function(d) { return d._r; });
+    label.attr('x', function(d) { return d.x; })
+         .attr('y', function(d) { return d.y; });
+  });
+}
+
+// ── Hive Plot (radial) ────────────────────────────────────────────────
+function renderClusterHive(container, data) {
+  var vbW = 800, vbH = 600;
+  var cx = vbW / 2, cy = vbH / 2;
+  var margin = 50;
+  var innerR = 40;
+  var outerR = Math.min(vbW, vbH) / 2 - margin;
+
+  // Group nodes by entity type
+  function entityType(n) { return n.concept_type || n.type || 'concept'; }
   var typeGroups = {};
   data.nodes.forEach(function(n) {
-    var t = n.type || 'other';
+    var t = entityType(n);
     if (!typeGroups[t]) typeGroups[t] = [];
     typeGroups[t].push(n);
   });
@@ -3023,24 +3175,17 @@ function renderClusterKG(container, data) {
     return;
   }
 
-  // Sort nodes within each group by frequency (descending)
   typeKeys.forEach(function(t) {
     typeGroups[t].sort(function(a, b) { return (b.frequency || 0) - (a.frequency || 0); });
   });
 
-  // Color mapping
   var hiveColors = {
-    'topic': '#3fb950',
-    'intent': '#f85149',
-    'concept': '#d29922',
-    'technical_term': '#f0883e',
-    'acronym': '#a371f7',
+    'topic': '#3fb950', 'concept': '#d29922',
+    'technical_term': '#f0883e', 'acronym': '#a371f7',
   };
   function typeColor(t) { return hiveColors[t] || 'var(--text-muted)'; }
 
-  // Build node position map
-  var nodePositions = {};
-  var nodeRadius = {};
+  var nodePositions = {}, nodeRadius = {};
 
   typeKeys.forEach(function(t, ti) {
     var angle = (2 * Math.PI / nTypes) * ti - Math.PI / 2;
@@ -3049,85 +3194,62 @@ function renderClusterKG(container, data) {
     nodes.forEach(function(n, ni) {
       var frac = maxFreq > 1 ? ((n.frequency || 1) / maxFreq) : (ni + 1) / nodes.length;
       var r = innerR + frac * (outerR - innerR);
-      nodePositions[n.id] = { x: w / 2 + r * Math.cos(angle), y: h / 2 + r * Math.sin(angle), angle: angle, r: r };
-      nodeRadius[n.id] = 4 + Math.min(10, (n.frequency || 1) * 2);
+      nodePositions[n.id] = { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), angle: angle, r: r };
+      nodeRadius[n.id] = 3 + Math.min(6, (n.frequency || 1) * 1.5);
     });
   });
 
-  // Build SVG
-  var svg = d3.select(container).append('svg').attr('width', w).attr('height', h);
+  var svg = d3.select(container).append('svg')
+    .attr('viewBox', '0 0 ' + vbW + ' ' + vbH)
+    .attr('preserveAspectRatio', 'xMidYMid meet');
   var g = svg.append('g');
 
-  // Zoom
-  var zoom = d3.zoom().scaleExtent([0.3, 3]).on('zoom', function(ev) {
-    g.attr('transform', ev.transform);
-  });
+  var zoom = d3.zoom().scaleExtent([0.3, 3]).on('zoom', function(ev) { g.attr('transform', ev.transform); });
   svg.call(zoom);
 
-  // Draw axes
+  // Axes
   typeKeys.forEach(function(t, ti) {
     var angle = (2 * Math.PI / nTypes) * ti - Math.PI / 2;
-    var x1 = w / 2 + innerR * Math.cos(angle);
-    var y1 = h / 2 + innerR * Math.sin(angle);
-    var x2 = w / 2 + outerR * Math.cos(angle);
-    var y2 = h / 2 + outerR * Math.sin(angle);
-    g.append('line')
-      .attr('x1', x1).attr('y1', y1)
-      .attr('x2', x2).attr('y2', y2)
-      .attr('stroke', typeColor(t))
-      .attr('stroke-width', 1.5)
-      .attr('stroke-opacity', 0.3);
-
-    // Axis label
-    var labelX = w / 2 + (outerR + 16) * Math.cos(angle);
-    var labelY = h / 2 + (outerR + 16) * Math.sin(angle);
-    g.append('text')
-      .attr('x', labelX).attr('y', labelY)
-      .attr('text-anchor', 'middle').attr('dy', '0.35em')
+    var x1 = cx + innerR * Math.cos(angle), y1 = cy + innerR * Math.sin(angle);
+    var x2 = cx + outerR * Math.cos(angle), y2 = cy + outerR * Math.sin(angle);
+    g.append('line').attr('x1', x1).attr('y1', y1).attr('x2', x2).attr('y2', y2)
+      .attr('stroke', typeColor(t)).attr('stroke-width', 1.5).attr('stroke-opacity', 0.3);
+    var lx = cx + (outerR + 16) * Math.cos(angle), ly = cy + (outerR + 16) * Math.sin(angle);
+    g.append('text').attr('x', lx).attr('y', ly).attr('text-anchor', 'middle').attr('dy', '0.35em')
       .attr('fill', typeColor(t)).attr('font-size', 11).attr('font-weight', 600)
       .text(t.replace(/_/g, ' '));
   });
 
-  // Draw edges as curved paths
-  var linkGroup = g.append('g').attr('stroke-opacity', 0.2);
+  // Edges
+  var linkGroup = g.append('g').attr('stroke-opacity', 0.4);
   data.links.forEach(function(edge) {
-    var src = nodePositions[edge.source];
-    var tgt = nodePositions[edge.target];
+    var src = nodePositions[edge.source], tgt = nodePositions[edge.target];
     if (!src || !tgt) return;
-
-    // Cubic bezier with control points
     var midAngle = (src.angle + tgt.angle) / 2;
     var midR = (src.r + tgt.r) / 2 * 0.6;
-    var cx = w / 2 + midR * Math.cos(midAngle);
-    var cy = h / 2 + midR * Math.sin(midAngle);
-
+    var pCx = cx + midR * Math.cos(midAngle), pCy = cy + midR * Math.sin(midAngle);
     linkGroup.append('path')
-      .attr('d', 'M' + src.x + ',' + src.y + ' Q' + cx + ',' + cy + ' ' + tgt.x + ',' + tgt.y)
-      .attr('stroke', 'var(--text-muted)')
-      .attr('stroke-width', Math.min(3, (edge.weight || 1) * 0.8))
-      .attr('fill', 'none');
+      .attr('d', 'M' + src.x + ',' + src.y + ' Q' + pCx + ',' + pCy + ' ' + tgt.x + ',' + tgt.y)
+      .attr('stroke', 'var(--text-muted)').attr('stroke-width', 1.2).attr('fill', 'none');
   });
 
-  // Draw nodes
+  // Nodes
   var nodeGroup = g.append('g');
   var tooltip = null;
-
   data.nodes.forEach(function(n) {
     var pos = nodePositions[n.id];
     if (!pos) return;
-    var rad = nodeRadius[n.id] || 5;
-    var col = typeColor(n.type);
-
-    nodeGroup.append('circle')
-      .attr('cx', pos.x).attr('cy', pos.y).attr('r', rad)
+    var rad = nodeRadius[n.id] || 4;
+    var col = typeColor(entityType(n));
+    nodeGroup.append('circle').attr('cx', pos.x).attr('cy', pos.y).attr('r', rad)
       .attr('fill', col).attr('stroke', 'var(--bg-primary)').attr('stroke-width', 1.5)
       .style('cursor', 'pointer')
       .on('mouseenter', function(ev) {
         if (tooltip) tooltip.remove();
         tooltip = document.createElement('div');
         tooltip.className = 'cluster-hive-tooltip';
-        tooltip.innerHTML = '<strong>' + esc(n.label) + '</strong>' +
-          '<br><span style="color:' + col + '">' + n.type + '</span>' +
+        tooltip.innerHTML = '<strong>' + esc(n.label || n.title || '') + '</strong>' +
+          '<br><span style="color:' + col + '">' + entityType(n) + '</span>' +
           '<br>frequency: ' + (n.frequency || 1);
         document.body.appendChild(tooltip);
         var rect = tooltip.getBoundingClientRect();
@@ -3140,30 +3262,24 @@ function renderClusterKG(container, data) {
         tooltip.style.left = (ev.clientX - rect.width / 2) + 'px';
         tooltip.style.top = (ev.clientY - rect.height - 12) + 'px';
       })
-      .on('mouseleave', function() {
-        if (tooltip) { tooltip.remove(); tooltip = null; }
-      });
+      .on('mouseleave', function() { if (tooltip) { tooltip.remove(); tooltip = null; } });
 
-    // Label
     if (rad > 5) {
-      nodeGroup.append('text')
-        .attr('x', pos.x).attr('y', pos.y + rad + 10)
-        .attr('text-anchor', 'middle').attr('fill', 'var(--text-muted)')
-        .attr('font-size', 9)
-        .text(n.label.length > 16 ? n.label.slice(0, 14) + '..' : n.label);
+      nodeGroup.append('text').attr('x', pos.x).attr('y', pos.y + rad + 10)
+        .attr('text-anchor', 'middle').attr('fill', 'var(--text-muted)').attr('font-size', 9)
+        .text((n.label || '').length > 16 ? (n.label || '').slice(0, 14) + '..' : (n.label || ''));
     }
   });
 
   // Legend
   var legendG = svg.append('g').attr('transform', 'translate(10, 10)');
-  legendG.append('rect').attr('width', 120).attr('height', 20 + nTypes * 16)
+  legendG.append('rect').attr('width', 130).attr('height', 20 + nTypes * 16)
     .attr('fill', 'var(--bg-primary)').attr('fill-opacity', 0.85).attr('rx', 4);
   legendG.append('text').attr('x', 8).attr('y', 14).attr('font-size', 10)
     .attr('fill', 'var(--text-muted)').attr('font-weight', 600).text('Entity Types');
   typeKeys.forEach(function(t, ti) {
     var ly = 26 + ti * 16;
-    legendG.append('circle').attr('cx', 12).attr('cy', ly).attr('r', 4)
-      .attr('fill', typeColor(t));
+    legendG.append('circle').attr('cx', 12).attr('cy', ly).attr('r', 4).attr('fill', typeColor(t));
     legendG.append('text').attr('x', 22).attr('y', ly + 4).attr('font-size', 9)
       .attr('fill', 'var(--text-muted)').text(t.replace(/_/g, ' ') + ' (' + (typeGroups[t] || []).length + ')');
   });
