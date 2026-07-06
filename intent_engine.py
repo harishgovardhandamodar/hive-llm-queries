@@ -327,6 +327,25 @@ def discover_intents(queries: list[dict], conv_id: str = "",
     return result
 
 
+def discover_intents_deep(queries: list[dict], conv_id: str = "",
+                          conv_title: str = "", model: str = "llama3.2:3b",
+                          max_sub_cluster: int = 30
+                          ) -> dict[str, dict | list]:
+    """Like discover_intents but sub-clusters groups larger than max_sub_cluster.
+
+    Returns {label: {queries: [...], sub_groups: {sub_label: [queries,...]}}}
+    """
+    top_groups = discover_intents(queries, conv_id, conv_title, model)
+    result: dict[str, dict | list] = {}
+    for label, qs in top_groups.items():
+        if len(qs) > max_sub_cluster:
+            subs = discover_intents(qs, conv_id + f"_{label}", conv_title, model)
+            result[label] = {"queries": qs, "sub_groups": subs, "count": len(qs)}
+        else:
+            result[label] = {"queries": qs, "sub_groups": {}, "count": len(qs)}
+    return result
+
+
 def _extract_topics(text: str) -> list[str]:
     """Simple keyword-based topic extraction."""
     topics = []

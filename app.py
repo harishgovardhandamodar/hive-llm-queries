@@ -22,7 +22,7 @@ from flask import Flask, jsonify, render_template, request
 sys.path.insert(0, "/Users/harishgovardhandamodar/codebase/hive-datatype")
 from hive_datatype import HiveGraph, Node, NodeType, Edge
 
-from intent_engine import discover_intents as ie_discover_intents
+from intent_engine import discover_intents_deep
 
 app = Flask(__name__)
 
@@ -527,7 +527,7 @@ def api_conversation_subgraph(conv_id: str):
                 "answer": messages[i + 1].get("content", "") if i + 1 < len(messages) and messages[i + 1].get("role") == "assistant" else "",
             })
 
-    message_groups = ie_discover_intents(user_queries, conv_id=conv_id, conv_title=title, model=_current_model)
+    message_groups = discover_intents_deep(user_queries, conv_id=conv_id, conv_title=title, model=_current_model, max_sub_cluster=30)
 
     result = hg.to_node_link_dict()
     result["conversation"] = {
@@ -636,10 +636,10 @@ def api_chat_files():
 @app.route("/api/cross-intents")
 def api_cross_intents():
     """Cross-conversation intent grouping."""
-    from intent_engine import cross_cluster_intents
+    from intent_engine import cross_cluster_intents, discover_intents_deep
     convs = load_chat_data()
     per_conv: dict[str, dict[str, list[dict]]] = {}
-    for conv in convs[:20]:  # max 20 convs for performance
+    for conv in convs[:20]:
         cid = conv.get("id", "")
         title = conv.get("title", "Untitled")
         messages = get_user_queries_and_answers(conv)
@@ -653,7 +653,7 @@ def api_cross_intents():
                     "conv_title": title,
                 })
         if user_qs:
-            groups = ie_discover_intents(user_qs, conv_id=cid, conv_title=title, model=_current_model)
+            groups = discover_intents_deep(user_qs, conv_id=cid, conv_title=title, model=_current_model)
             if groups:
                 per_conv[title] = groups
 

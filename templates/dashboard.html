@@ -1188,13 +1188,14 @@ function getNodeRadius(d) {
   }
 }
 
-// ── Subgraph with intent drill-down ─────────────────────────────────────
-let sgState = { view: 'overview', intentKey: null, data: null };
+// ── Subgraph with 3-level drill-down ────────────────────────────────────
+let sgState = { view: 'overview', intentKey: null, subIntentKey: null, data: null };
 
 function renderSubgraph(data, viewport) {
   sgState.data = data;
   sgState.view = 'overview';
   sgState.intentKey = null;
+  sgState.subIntentKey = null;
   renderSGView(viewport);
 }
 
@@ -1208,7 +1209,14 @@ function renderSGView(viewport) {
 
   if (sgState.view === 'overview') {
     renderSGOverview(data, viewport, vpWidth, vpHeight);
-  } else {
+  } else if (sgState.view === 'intent') {
+    const group = (data.message_groups||{})[sgState.intentKey];
+    if (group && group.sub_groups && Object.keys(group.sub_groups).length > 0) {
+      renderSGSubIntents(data, viewport, vpWidth, vpHeight);
+    } else {
+      renderSGIntent(data, viewport, vpWidth, vpHeight);
+    }
+  } else if (sgState.view === 'subintent') {
     renderSGIntent(data, viewport, vpWidth, vpHeight);
   }
 }
@@ -1226,9 +1234,11 @@ function renderSGOverview(data, viewport, w, h) {
   svg.call(zoom);
 
   const convNode = { id: `conv_${conv.id}`, label: conv.title || 'Conversation', nodeType: 'conversation', r: 20 };
-  const intentNodes = Object.keys(groups).map(k => ({
-    id: `intent_${k}`, label: k, nodeType: 'intent', r: 14, _intentKey: k, _msgCount: groups[k].length,
-  }));
+  const intentNodes = Object.keys(groups).map(k => {
+    const g = groups[k];
+    const cnt = typeof g === 'object' && g.count !== undefined ? g.count : (Array.isArray(g) ? g.length : 0);
+    return { id: `intent_${k}`, label: k, nodeType: 'intent', r: 14, _intentKey: k, _msgCount: cnt };
+  });
   const topicNodes = (conv.topics || []).map(t => ({
     id: `topic_${t}`, label: t, nodeType: 'topic', r: 9,
   }));
@@ -1293,7 +1303,10 @@ function renderSGOverview(data, viewport, w, h) {
     </span>
   `);
 
-  for (const [groupKey, msgs] of Object.entries(groups)) {
+  for (const [groupKey, g] of Object.entries(groups)) {
+    const msgs = g.queries || g || [];
+    const subCount = g.sub_groups ? Object.keys(g.sub_groups).length : 0;
+    const total = typeof g === 'object' && g.count !== undefined ? g.count : msgs.length;
     const col = intentColor(groupKey);
     const groupDiv = panel.append('div').attr('class', 'sg-group');
     const titleDiv = groupDiv.append('div').attr('class', 'sg-group-title')
@@ -1301,14 +1314,15 @@ function renderSGOverview(data, viewport, w, h) {
       .on('click', () => {
         sgState.view = 'intent';
         sgState.intentKey = groupKey;
+        sgState.subIntentKey = null;
         renderSGView(viewport);
       });
+    const subHint = subCount > 0 ? ` · ${subCount} sub-groups` : '';
     titleDiv.html(`
       <span class="sg-intent-tag" style="background:${col}22;color:${col}">${esc(groupKey)}</span>
-      ${msgs.length} queries <span style="color:var(--text-dim);font-size:10px;">click to explore</span>
+      ${total} queries${subHint} <span style="color:var(--text-dim);font-size:10px;">click to explore</span>
     `);
 
-    // Show first 2 messages as preview
     for (const msg of msgs.slice(0, 2)) {
       const card = groupDiv.append('div').attr('class', 'sg-msg-card')
         .on('click', () => openConversationDetail(conv.id));
@@ -1329,16 +1343,31 @@ function renderSGIntent(data, viewport, w, h) {
   const conv = data.conversation || {};
   const groups = data.message_groups || {};
   const intentKey = sgState.intentKey || '';
-  const msgs = groups[intentKey] || [];
-  const col = intentColor(intentKey);
+  const subKey = sgState.subIntentKey || '';
+
+  // Determine source of messages: top-level group or sub-group
+  let msgs, col, parentForBreadcrumb;
+  const group = groups[intentKey] || {};
+  if (sgState.view === 'subintent' && group.sub_groups && group.sub_groups[subKey]) {
+    msgs = group.sub_groups[subKey] || [];
+    col = intentColor(intentKey);
+    parentForBreadcrumb = intentKey;
+  } else {
+    msgs = group.queries || group || [];
+    col = intentColor(intentKey);
+    parentForBreadcrumb = null;
+  }
 
   // ── Breadcrumb bar ──
-  const bread = d3.select(viewport).append('div').attr('class', 'sg-breadcrumb').html(`
-    <a href="#" class="sg-back" onclick="sgState.view='overview';sgState.intentKey=null;renderSGView(document.getElementById('graph-viewport'));return false;">&larr; ${esc(conv.title||'Conversation')}</a>
-    <span style="color:var(--text-muted);margin:0 6px;">/</span>
-    <span class="sg-intent-tag" style="background:${col}22;color:${col};display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;">${esc(intentKey)}</span>
-    <span style="color:var(--text-muted);font-size:11px;margin-left:6px;">${msgs.length} queries</span>
-  `);
+  let breadHtml = `<a href="#" class="sg-back" onclick="sgState.view='overview';sgState.intentKey=null;sgState.subIntentKey=null;renderSGView(document.getElementById('graph-viewport'));return false;">&larr; ${esc(conv.title||'Conversation')}</a>`;
+  if (parentForBreadcrumb) {
+    breadHtml += `<span style="color:var(--text-muted);margin:0 6px;">/</span><a href="#" class="sg-back" onclick="sgState.view='intent';sgState.subIntentKey=null;renderSGView(document.getElementById('graph-viewport'));return false;">${esc(intentKey)}</a>`;
+  }
+  breadHtml += `<span style="color:var(--text-muted);margin:0 6px;">/</span>`;
+  breadHtml += `<span class="sg-intent-tag" style="background:${col}22;color:${col};display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;">${esc(sgState.view === 'subintent' ? subKey : intentKey)}</span>`;
+  breadHtml += `<span style="color:var(--text-muted);font-size:11px;margin-left:6px;">${msgs.length} queries</span>`;
+
+  const bread = d3.select(viewport).append('div').attr('class', 'sg-breadcrumb').html(breadHtml);
 
   // ── Intent-focused graph ──
   const svg = d3.select(viewport).append('svg').attr('width', w).attr('height', graphH).style('display', 'block');
@@ -1428,6 +1457,101 @@ function openConversationDetail(convId) {
   if (panel) panel.classList.add('open');
   selectConversation(convId);
 }
+
+// ── Sub-intent grouping view (third level) ───────────────────────────────
+function renderSGSubIntents(data, viewport, w, h) {
+  const graphH = Math.floor(h * 0.45);
+  const panelH = h - graphH;
+  const conv = data.conversation || {};
+  const group = (data.message_groups||{})[sgState.intentKey] || {};
+  const subGroups = group.sub_groups || {};
+  const col = intentColor(sgState.intentKey);
+
+  const bread = d3.select(viewport).append('div').attr('class', 'sg-breadcrumb').html(`
+    <a href="#" class="sg-back" onclick="sgState.view='overview';sgState.intentKey=null;renderSGView(document.getElementById('graph-viewport'));return false;">&larr; ${esc(conv.title||'')}</a>
+    <span style="color:var(--text-muted);margin:0 6px;">/</span>
+    <span class="sg-intent-tag" style="background:${col}22;color:${col};display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;">${esc(sgState.intentKey)}</span>
+    <span style="color:var(--text-muted);font-size:11px;margin-left:6px;">${Object.keys(subGroups).length} sub-groups</span>
+  `);
+
+  const svg = d3.select(viewport).append('svg').attr('width', w).attr('height', graphH).style('display', 'block');
+  const g = svg.append('g');
+  const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', (ev) => g.attr('transform', ev.transform));
+  svg.call(zoom);
+
+  const intentNode = { id: `intent_${sgState.intentKey}`, label: sgState.intentKey, nodeType: 'intent', r: 18, _fixed: true };
+  const subNodes = Object.keys(subGroups).map(k => ({
+    id: `sub_${k}`, label: k, nodeType: 'topic', r: 12, _subKey: k, _count: (subGroups[k]||[]).length,
+  }));
+
+  const allNodes = [intentNode, ...subNodes];
+  const links = subNodes.map(n => ({ source: intentNode.id, target: n.id, relation: 'sub_intent' }));
+
+  const sim = d3.forceSimulation(allNodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(140))
+    .force('charge', d3.forceManyBody().strength(-400))
+    .force('center', d3.forceCenter(w / 2, graphH / 2))
+    .force('collision', d3.forceCollide().radius(d => d.r + 12));
+
+  g.append('g').selectAll('line').data(links).join('line')
+    .attr('stroke', col).attr('stroke-width', 2).attr('stroke-opacity', 0.4);
+
+  g.append('g').selectAll('circle').data(allNodes).join('circle')
+    .attr('r', d => d.r).attr('fill', d => getNodeColor(d))
+    .attr('stroke', d => d._fixed ? col : 'var(--bg-primary)').attr('stroke-width', 2)
+    .style('cursor', d => d._subKey ? 'pointer' : 'default')
+    .on('click', (ev, d) => {
+      if (d._subKey) {
+        sgState.view = 'subintent';
+        sgState.subIntentKey = d._subKey;
+        renderSGView(viewport);
+      }
+    })
+    .on('mouseenter', (ev, d) => {
+      if (d._subKey) {
+        d3.select('body').append('div').attr('class', 'tooltip')
+          .html(`<h3>${esc(d.label)}</h3><p class="tt-meta">${d._count} queries</p>`)
+          .style('left', (ev.pageX+12)+'px').style('top', (ev.pageY-10)+'px');
+      }
+    })
+    .on('mouseleave', () => d3.selectAll('.tooltip').remove())
+    .call(d3.drag().on('start',(ev,d)=>{if(!ev.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;})
+      .on('drag',(ev,d)=>{d.fx=ev.x;d.fy=ev.y;})
+      .on('end',(ev,d)=>{if(!ev.active)sim.alphaTarget(0);d.fx=null;d.fy=null;}));
+
+  g.append('g').selectAll('text').data(allNodes).join('text')
+    .text(d => d.label.length > 18 ? d.label.slice(0,16)+'..' : d.label)
+    .attr('font-size', d => Math.max(8, d.r*0.5)).attr('fill', 'var(--text-secondary)')
+    .attr('text-anchor', 'middle').attr('dy', d => d.r+14);
+
+  sim.on('tick', () => {
+    g.selectAll('line').attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
+      .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    g.selectAll('circle').attr('cx',d=>d.x).attr('cy',d=>d.y);
+    g.selectAll('text').attr('x',d=>d.x).attr('y',d=>d.y);
+  });
+
+  const panel = d3.select(viewport).append('div').attr('class', 'subgraph-panel')
+    .style('height', panelH + 'px').style('overflow-y', 'auto');
+
+  for (const [subKey, msgs] of Object.entries(subGroups)) {
+    const subDiv = panel.append('div').attr('class', 'sg-group');
+    subDiv.append('div').attr('class', 'sg-group-title').style('cursor','pointer')
+      .html(`<span style="color:${col};font-weight:600;">${esc(subKey)}</span> ${msgs.length} queries`)
+      .on('click', () => {
+        sgState.view = 'subintent';
+        sgState.subIntentKey = subKey;
+        renderSGView(viewport);
+      });
+    for (const msg of msgs.slice(0, 2)) {
+      subDiv.append('div').attr('class', 'sg-msg-card').html(`
+        <div class="sg-msg-query">${esc(truncate(msg.content, 140))}</div>
+        <div class="sg-msg-meta">${(msg.topics||[]).map(t=>'<span class="sg-topic-tag">'+esc(t)+'</span>').join('')}</div>
+      `);
+    }
+  }
+}
+
 
 function truncate(s, n) { return (s||'').length > n ? (s||'').slice(0, n) + '...' : s||''; }
 
