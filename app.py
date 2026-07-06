@@ -760,9 +760,10 @@ if __name__ == "__main__":
     import webbrowser
 
     # Load chat data in background so server starts immediately
+    _build_in_progress = True  # prevent race: set BEFORE thread starts
+
     def _startup_build():
         global _graph_data, _build_in_progress
-        _build_in_progress = True
         try:
             data = build_knowledge_graph(load_chat_data())
             _graph_data = data

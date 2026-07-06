@@ -760,10 +760,31 @@ let searchTerm = '';
 
 // ── Load data ────────────────────────────────────────────────────────────
 async function loadData() {
-  const resp = await fetch('/api/graph');
-  graphData = await resp.json();
+  // Poll until graph is ready (background build may still be running)
+  for (let attempt = 0; attempt < 60; attempt++) {
+    try {
+      const resp = await fetch('/api/graph');
+      graphData = await resp.json();
+      if (graphData && graphData.nodes && graphData.nodes.length > 0) {
+        break;  // got real data
+      }
+      if (graphData && graphData.error === 'building') {
+        // Still building — show status and keep polling
+        document.getElementById('loading').innerHTML =
+          '<div style="text-align:center;color:var(--text-muted);padding:40px;">' +
+          '<div class="loading-spinner"></div>' +
+          '<p style="margin-top:16px;font-size:13px;">Building knowledge graph with Ollama...</p>' +
+          '<p style="margin-top:4px;font-size:11px;color:var(--text-dim);">First load requires embedding all conversations</p></div>';
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      break;
+    } catch (_) {
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
   document.getElementById('loading').style.display = 'none';
-  render();
+  if (graphData && graphData.nodes) render();
 }
 
 // ── Render ────────────────────────────────────────────────────────────────
