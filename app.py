@@ -144,6 +144,185 @@ def extract_with_ollama(conv: dict) -> tuple[str, dict]:
         }
 
 
+# ── Vector-based intent discovery ──────────────────────────────────────────
+
+EMBED_URL = os.environ.get("EMBED_URL", "http://localhost:11434/api/embed")
+EMBED_MODEL = os.environ.get("EMBED_MODEL", "nomic-embed-text")
+CLUSTER_SIM_THRESHOLD = float(os.environ.get("CLUSTER_SIM_THRESHOLD", "0.6"))
+MAX_EMBED_QUERIES = 3000
+
+
+def _cosine_sim(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(x * x for x in b) ** 0.5
+    return dot / (na * nb + 1e-10)
+
+
+def get_embeddings(texts: list[str]) -> list[list[float]]:
+    """Get embeddings for a list of texts via Ollama."""
+    if not texts:
+        return []
+    # Truncate very long texts
+    texts = [t[:8000] for t in texts]
+    try:
+        resp = requests.post(
+            EMBED_URL,
+            json={"model": EMBED_MODEL, "input": texts},
+            timeout=120,
+        )
+        return resp.json().get("embeddings", [])
+    except Exception:
+        return []
+
+
+def discover_intents(queries: list[dict]) -> dict[str, list[dict]]:
+    """Cluster user queries by embedding similarity to discover intent groups.
+
+    Returns a dict mapping intent label -> list of query dicts (with index, content, topics).
+    """
+    if not queries:
+        return {"other": []}
+
+    texts = [q.get("content", "")[:400] for q in queries]
+    embeds = get_embeddings(texts)
+    if not embeds or len(embeds) != len(queries):
+        return {"other": list(queries)}
+
+    # Centroid-based incremental clustering
+    clusters: list[dict] = []  # each: {"centroid": [...], "indices": [int], "label": str}
+
+    for i, (q, emb) in enumerate(zip(queries, embeds)):
+        best_idx = -1
+        best_sim = -1.0
+        for ci, cl in enumerate(clusters):
+            sim = _cosine_sim(emb, cl["centroid"])
+            if sim > best_sim:
+                best_sim = sim
+                best_idx = ci
+
+        if best_sim >= CLUSTER_SIM_THRESHOLD:
+            cl = clusters[best_idx]
+            cl["indices"].append(i)
+            n = len(cl["indices"])
+            cl["centroid"] = [
+                (c * (n - 1) + e) / n for c, e in zip(cl["centroid"], emb)
+            ]
+        else:
+            clusters.append({"centroid": emb, "indices": [i]})
+
+    # Merge very small clusters into their nearest big neighbor
+    merged: dict[int, int] = {}  # index -> cluster_idx
+    for ci, cl in enumerate(clusters):
+        for idx in cl["indices"]:
+            merged[idx] = ci
+
+    # Merge small clusters into nearest larger neighbor
+    min_cluster_size = max(2, int(len(queries) * 0.01))  # at least 1% of total
+    large = [c for c in clusters if len(c["indices"]) >= min_cluster_size]
+    small = [c for c in clusters if len(c["indices"]) < min_cluster_size]
+    for sc in small:
+        best_large = -1
+        best_sim = -1.0
+        for li, lc in enumerate(large):
+            sim = _cosine_sim(sc["centroid"], lc["centroid"])
+            if sim > best_sim:
+                best_sim = sim
+                best_large = li
+        if best_large >= 0:
+            for idx in sc["indices"]:
+                large[best_large]["indices"].append(idx)
+            n = len(large[best_large]["indices"])
+            m = len(sc["indices"])
+            large[best_large]["centroid"] = [
+                (c * (n - m) + sc_c * m) / n
+                for c, sc_c in zip(large[best_large]["centroid"], sc["centroid"])
+            ]
+    clusters = large if large else clusters
+
+    # Label each cluster by its dominant topics
+    result: dict[str, list[dict]] = {}
+    for cl in clusters:
+        if not cl["indices"]:
+            continue
+
+        # Collect topics across all queries in this cluster
+        topic_counts: dict[str, int] = {}
+        for idx in cl["indices"]:
+            if idx < len(queries):
+                q_topics = _extract_topics_from_query(queries[idx].get("content", ""))
+                for t in q_topics:
+                    topic_counts[t] = topic_counts.get(t, 0) + 1
+
+        # Build label from top topics
+        sorted_topics = sorted(topic_counts.items(), key=lambda x: -x[1])
+        if sorted_topics:
+            top_t = sorted_topics[0][0]
+            label = top_t
+            if len(sorted_topics) > 1 and sorted_topics[1][1] >= sorted_topics[0][1] * 0.4:
+                label += f"_{sorted_topics[1][0]}"
+            elif len(sorted_topics) > 2 and sorted_topics[2][1] >= sorted_topics[0][1] * 0.3:
+                label += f"_{sorted_topics[2][0]}"
+        else:
+            label = "discussion"
+
+        # Deduplicate label by adding a differentiator
+        if label in result:
+            # Try appending the next distinct topic
+            for t_name, _ in sorted_topics[1:]:
+                candidate = f"{top_t}_{t_name}"
+                if candidate not in result:
+                    label = candidate
+                    break
+            else:
+                # Add a generic but descriptive suffix based on query style
+                cl_queries = [queries[i].get("content", "")[:30] for i in cl["indices"][:5]]
+                q_prefix = ""
+                for q in cl_queries:
+                    words = q.lower().split()
+                    for w in words:
+                        if w not in ("the", "a", "an", "is", "what", "how", "why", "can", "do", "does", "are"):
+                            q_prefix = w[:12]
+                            break
+                    if q_prefix:
+                        break
+                label = f"{top_t}_{q_prefix}" if q_prefix else f"{top_t}_{len(result)}"
+
+        result[label] = []
+        for idx in sorted(cl["indices"]):
+            if idx < len(queries):
+                q = dict(queries[idx])
+                q["topics"] = _extract_topics_from_query(q.get("content", ""))
+                result[label].append(q)
+
+    if not result:
+        result["discussion"] = list(queries)
+
+    return result
+
+
+def _extract_topics_from_query(text: str) -> list[str]:
+    """Simple keyword-based topic extraction from a query."""
+    topics = []
+    keywords = {
+        "price": ["price", "cost", "market", "value"],
+        "mining": ["miner", "mine", "difficulty", "hash", "reward"],
+        "conversion": ["convert", "rate", "ratio", "exchange", "swap"],
+        "network": ["network", "node", "protocol", "consensus"],
+        "stability": ["stable", "stability", "peg", "anchor"],
+        "security": ["security", "attack", "vulnerability", "risk"],
+        "performance": ["performance", "speed", "latency", "throughput"],
+        "economics": ["econom", "supply", "demand", "incentive", "tokenomic"],
+        "governance": ["govern", "vote", "proposal", "dao"],
+        "technical": ["implement", "code", "api", "sdk", "deploy", "architect"],
+    }
+    lower = text.lower()
+    for topic, words in keywords.items():
+        if any(w in lower for w in words):
+            topics.append(topic)
+    return topics[:3]
+
+
 def build_cache() -> dict:
     if CACHE_PATH.exists():
         with open(CACHE_PATH) as f:
@@ -482,27 +661,20 @@ def api_conversation_subgraph(conv_id: str):
         add_node(tid, "concept", tag, "tag")
         add_edge(conv_nid, tid, "tagged")
 
-    # Group messages by intent and topic
-    message_groups: dict[str, list[dict]] = {}
+    # Vector-based intent discovery for user queries
+    user_queries = []
     for i, msg in enumerate(messages):
-        if msg.get("role") != "user":
-            continue
-        content = (msg.get("content") or "").lower()
-        # Assign a topic based on keyword overlap with conversation topics
-        matched_topics = [t for t in conv_topics if any(w in content for w in t.lower().split())]
-        group_key = conv_intent if matched_topics else conv_intent
-        if not group_key:
-            group_key = "other"
-        if group_key not in message_groups:
-            message_groups[group_key] = []
-        message_groups[group_key].append({
-            "index": i,
-            "content": msg.get("content", ""),
-            "model": msg.get("model", ""),
-            "topics": matched_topics or conv_topics[:1],
-            "intent": conv_intent,
-            "answer": messages[i + 1].get("content", "") if i + 1 < len(messages) and messages[i + 1].get("role") == "assistant" else "",
-        })
+        if msg.get("role") == "user":
+            user_queries.append({
+                "index": i,
+                "content": msg.get("content", ""),
+                "model": msg.get("model", ""),
+                "intent": "",
+                "topics": [],
+                "answer": messages[i + 1].get("content", "") if i + 1 < len(messages) and messages[i + 1].get("role") == "assistant" else "",
+            })
+
+    message_groups = discover_intents(user_queries)
 
     result = hg.to_node_link_dict()
     result["conversation"] = {
