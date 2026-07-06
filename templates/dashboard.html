@@ -868,10 +868,17 @@ a:hover { text-decoration: underline; }
 .cluster-divider:hover,
 .cluster-divider.active { background: var(--accent); }
 .cluster-summary-panel h4 {
-  margin: 0 0 6px 0;
+  margin: 14px 0 6px 0;
   font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.cluster-summary-panel h4:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 .cluster-summary-panel p {
   margin: 0 0 12px 0;
@@ -1163,7 +1170,8 @@ a:hover { text-decoration: underline; }
 
     <div class="filters" id="topic-filters">
       <h3>Topic</h3>
-      <div class="filter-tags" id="topic-tags"></div>
+      <div class="filter-tags collapsible" id="topic-tags" style="max-height:130px;overflow:hidden;transition:max-height 0.25s ease;"></div>
+      <div class="filter-expand" id="topic-expand" style="font-size:11px;color:var(--accent);cursor:pointer;padding:4px 0 0 4px;" onclick="toggleTopicExpand()">Show all</div>
     </div>
 
     <div class="filters" style="border-bottom:none;padding-top:4px;">
@@ -1328,6 +1336,13 @@ function renderStats() {
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────
+function toggleTopicExpand() {
+  const container = document.getElementById('topic-tags');
+  const btn = document.getElementById('topic-expand');
+  const expanded = container.style.maxHeight !== '130px';
+  container.style.maxHeight = expanded ? '130px' : container.scrollHeight + 'px';
+  btn.textContent = expanded ? 'Show all' : 'Show less';
+}
 function renderFilters() {
   const intents = new Set();
   const topics = new Set();
@@ -1673,17 +1688,29 @@ function renderOverviewGraph(svgNode) {
 }
 
 function isNodeVisible(d) {
-  if (d.nodeType !== 'conversation') return true;
-  const conv = (graphData.conversations||[]).find(c => c.id === d.id);
-  if (!conv) return false;
-  if (searchTerm) {
-    const t = searchTerm.toLowerCase();
-    if (!(conv.title||'').toLowerCase().includes(t) &&
-        !(conv.summary||'').toLowerCase().includes(t)) return false;
+  if (d.nodeType === 'conversation') {
+    const conv = (graphData.conversations||[]).find(c => c.id === d.id);
+    if (!conv) return false;
+    if (searchTerm) {
+      const t = searchTerm.toLowerCase();
+      if (!(conv.title||'').toLowerCase().includes(t) &&
+          !(conv.summary||'').toLowerCase().includes(t)) return false;
+    }
+    if (activeFilters.intent.size > 0 && !activeFilters.intent.has(conv.intent)) return false;
+    if (activeFilters.topic.size > 0 && !(conv.topics||[]).some(t => activeFilters.topic.has(t))) return false;
+    return true;
   }
-  if (activeFilters.intent.size > 0 && !activeFilters.intent.has(conv.intent)) return false;
-  if (activeFilters.topic.size > 0 && !(conv.topics||[]).some(t => activeFilters.topic.has(t))) return false;
-  return true;
+  const visibleConvIds = new Set();
+  for (const c of graphData.conversations||[]) {
+    if (isNodeVisible({ id: c.id, nodeType: 'conversation' })) {
+      visibleConvIds.add(c.id);
+    }
+  }
+  return (graphData.links||[]).some(l => {
+    const sid = typeof l.source === 'object' ? l.source.id : l.source;
+    const tid = typeof l.target === 'object' ? l.target.id : l.target;
+    return (sid === d.id && visibleConvIds.has(tid)) || (tid === d.id && visibleConvIds.has(sid));
+  });
 }
 
 function updateGraphVisibility() {
@@ -1692,6 +1719,12 @@ function updateGraphVisibility() {
     svg.selectAll('circle').attr('opacity', d => isNodeVisible(d) ? 1 : 0.08);
     svg.selectAll('text').attr('opacity', d => isNodeVisible(d) ? 0.8 : 0);
     svg.selectAll('text.title-label').attr('opacity', d => isNodeVisible(d) ? 0.9 : 0);
+    svg.selectAll('line').attr('stroke-opacity', d => {
+      if (!d || !d.source || !d.target) return 0.1;
+      const srcVis = isNodeVisible(d.source);
+      const tgtVis = isNodeVisible(d.target);
+      return srcVis && tgtVis ? 0.3 : 0;
+    });
   }
 }
 
@@ -3479,11 +3512,6 @@ function renderClusterSummary(data) {
     data.takeaways.forEach(function(t) { html += '<li>' + esc(t) + '</li>'; });
     html += '</ul>';
   }
-  if (data.representative_questions && data.representative_questions.length > 0) {
-    html += '<h4>Representative Questions</h4><ul class="cluster-summary-rep">';
-    data.representative_questions.forEach(function(q) { html += '<li>' + esc(q) + '</li>'; });
-    html += '</ul>';
-  }
   // Distribution
   var dist = data.distribution;
   if (dist) {
@@ -3509,6 +3537,11 @@ function renderClusterSummary(data) {
       });
       html += '</div>';
     }
+  }
+  if (data.representative_questions && data.representative_questions.length > 0) {
+    html += '<h4>Representative Questions</h4><ul class="cluster-summary-rep">';
+    data.representative_questions.forEach(function(q) { html += '<li>' + esc(q) + '</li>'; });
+    html += '</ul>';
   }
   panel.innerHTML = html;
 }
