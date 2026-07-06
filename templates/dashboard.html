@@ -964,14 +964,12 @@ function closeTab(tabId) {
 }
 
 async function openConversationTab(convId) {
-  // Check if already open
   const existing = tabs.find(t => t.id === convId);
   if (existing) {
     switchTab(convId);
     return;
   }
 
-  // Find the conversation in current data for quick label
   const conv = (graphData.conversations||[]).find(c => c.id === convId);
   const label = conv ? (conv.title||'').slice(0, 30) : convId.slice(0, 8);
 
@@ -981,15 +979,21 @@ async function openConversationTab(convId) {
   renderTabBar();
   renderActiveGraph();
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120000);
+
   try {
-    const resp = await fetch(`/api/conversation-subgraph/${convId}`);
+    const resp = await fetch(`/api/conversation-subgraph/${convId}`, { signal: controller.signal });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
+    clearTimeout(timeout);
     tab.data = data;
     tab.loading = false;
     if (activeTabId === convId) renderActiveGraph();
   } catch (e) {
+    clearTimeout(timeout);
     tab.loading = false;
-    tab.error = e.message;
+    tab.error = e.name === 'AbortError' ? 'Request timed out (large conversation)' : e.message;
     if (activeTabId === convId) renderActiveGraph();
   }
 }
