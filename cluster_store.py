@@ -36,7 +36,8 @@ CLUSTERS_PATH = STORE_DIR / "clusters.json"
 CLUSTER_EMB_CACHE = Path(__file__).parent / ".intent_cache"
 CLUSTER_EMB_CACHE.mkdir(parents=True, exist_ok=True)
 
-LABEL_URL = "http://localhost:11434/api/chat"
+import os
+LABEL_URL = os.environ.get("LABEL_URL", "http://host.docker.internal:11434/api/chat")
 
 
 # ── Persistence ────────────────────────────────────────────────────────────

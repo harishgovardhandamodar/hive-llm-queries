@@ -8,12 +8,20 @@ from pathlib import Path
 
 import requests
 
-sys.path.insert(0, "/Users/harishgovardhandamodar/codebase/hive-datatype")
-
-OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://host.docker.internal:11434/api/generate").replace("/api/generate", "/api/chat")
 OLLAMA_MODEL = "llama3.2:3b"
 
 CACHE_PATH = Path(".extraction_cache.json")
+
+EXTRACTION_PROMPT = """{{"topics":["<1-4 topics>"],"concepts":["<3-8 concepts>"],"intent":"<category>","tags":["<2-6 tags>"],"summary":"<1 sentence>"}}
+
+Valid intents: build, debug, explain, compare, design, optimize, explore, integrate, deploy, troubleshoot, analyze, research, other
+
+Title: {title}
+Messages:
+{messages}
+
+Return ONLY valid JSON (no other text)."""
 
 # Load the newest JSON file from chatHistory
 chat_files = sorted(Path("chatHistory").glob("*.json"), reverse=True)
@@ -44,7 +52,7 @@ if not to_extract:
     sys.exit(0)
 
 
-def extract_one(conv):
+def extract_one(conv, retries=3):
     conv_id = conv.get("id", "")
     title = conv.get("title", "Untitled")
     messages = conv.get("chat", {}).get("messages", {})
@@ -57,36 +65,52 @@ def extract_one(conv):
         if content:
             msg_text += f"[{role.upper()}] {content[:500]}\n"
 
-    prompt = (
-        "Analyze this LLM conversation and extract structured information.\n\n"
-        f"Conversation title: {title}\n"
-        "Messages:\n"
-        f"{msg_text}\n"
-        "Return a JSON object (no markdown, no extra text) with these keys:\n"
-        '- "topics": array of 1-4 broad topic areas\n'
-        '- "concepts": array of 3-8 key technical concepts\n'
-        '- "intent": primary intent (build/debug/explain/compare/design/optimize/explore/integrate/deploy/troubleshoot/analyze/research/other)\n'
-        '- "tags": array of 2-6 short descriptive tags\n'
-        '- "summary": one sentence summary'
-    )
-    try:
-        resp = requests.post(
-            OLLAMA_URL,
-            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
-            timeout=120,
-        )
-        raw = resp.json().get("response", "")
-        raw = re.sub(r"^```(?:json)?\s*", "", raw).strip()
-        raw = re.sub(r"\s*```$", "", raw).strip()
-        return conv_id, json.loads(raw)
-    except Exception:
-        return conv_id, {
-            "topics": [],
-            "concepts": [],
-            "intent": "other",
-            "tags": [],
-            "summary": title,
-        }
+    prompt = EXTRACTION_PROMPT.format(title=title, messages=msg_text)
+    for attempt in range(retries):
+        try:
+            resp = requests.post(
+                OLLAMA_URL,
+                json={
+                    "model": OLLAMA_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                },
+                timeout=120,
+            )
+            raw = (resp.json().get("message", {}) or {}).get("content", "")
+            raw = re.sub(r"^```(?:json)?\s*", "", raw).strip()
+            raw = re.sub(r"\s*```$", "", raw).strip()
+            try:
+                result = json.loads(raw)
+            except json.JSONDecodeError:
+                decoder = json.JSONDecoder()
+                result = decoder.raw_decode(raw)[0]
+            if not isinstance(result.get("topics"), list):
+                result["topics"] = []
+            if not isinstance(result.get("concepts"), list):
+                result["concepts"] = []
+            if not isinstance(result.get("tags"), list):
+                result["tags"] = []
+            raw_intent = result.get("intent", "other")
+            if isinstance(raw_intent, str):
+                raw_intent = raw_intent.lower().strip()
+            elif isinstance(raw_intent, list):
+                raw_intent = (raw_intent[0] or "").lower().strip() if raw_intent else "other"
+            else:
+                raw_intent = str(raw_intent).lower().strip()
+            VALID_INTENTS = {"build","debug","explain","compare","design","optimize","explore","integrate","deploy","troubleshoot","analyze","research","other"}
+            result["intent"] = raw_intent if raw_intent in VALID_INTENTS else "other"
+            return conv_id, result
+        except Exception:
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+    return conv_id, {
+        "topics": [],
+        "concepts": [],
+        "intent": "other",
+        "tags": [],
+        "summary": title,
+    }
 
 
 t0 = time.time()

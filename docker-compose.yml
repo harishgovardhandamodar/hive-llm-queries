@@ -13,7 +13,7 @@ services:
       - OLLAMA_URL=http://host.docker.internal:11434/api/generate
       - EMBED_URL=http://host.docker.internal:11434/api/embed
       - LABEL_URL=http://host.docker.internal:11434/api/chat
-      - OLLAMA_MODEL=llama3.2:3b
+      - OLLAMA_MODEL=llama3.1:8b
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

@@ -115,22 +115,20 @@ def get_user_queries_and_answers(conv: dict) -> list[dict]:
 
 # ── Ollama extraction ──────────────────────────────────────────────────────
 
-EXTRACTION_PROMPT = """Analyze this LLM conversation and extract structured information.
+EXTRACTION_PROMPT = """{{"topics":["<1-4 topics>"],"concepts":["<3-8 concepts>"],"intent":"<category>","tags":["<2-6 tags>"],"summary":"<1 sentence>"}}
 
-Conversation title: {title}
+Valid intents: build, debug, explain, compare, design, optimize, explore, integrate, deploy, troubleshoot, analyze, research, other
+
+Title: {title}
 Messages:
 {messages}
 
-Return a JSON object (no markdown, no extra text) with these keys:
-- "topics": array of 1-4 broad topic areas (e.g. ["machine learning", "web development"])
-- "concepts": array of 3-8 key technical concepts or entities mentioned
-- "intent": the primary intent category (one of: build, debug, explain, compare, design, optimize, explore, integrate, deploy, troubleshoot, analyze, research, other)
-- "tags": array of 2-6 short descriptive tags
-- "summary": one sentence summary of what this conversation is about
-"""
+Return ONLY valid JSON (no other text)."""
 
 
-def _normalize_str_items(items: list) -> list[str]:
+def _normalize_str_items(items) -> list[str]:
+    if not items:
+        return []
     result = []
     for item in items:
         if isinstance(item, str):
@@ -166,10 +164,23 @@ def extract_with_ollama(conv: dict) -> tuple[str, dict]:
         raw = (resp.json().get("message", {}) or {}).get("content", "")
         raw = re.sub(r"^```(?:json)?\s*", "", raw).strip()
         raw = re.sub(r"\s*```$", "", raw).strip()
-        result = json.loads(raw)
-        result["topics"] = _normalize_str_items(result.get("topics", []))
-        result["concepts"] = _normalize_str_items(result.get("concepts", []))
-        result["tags"] = _normalize_str_items(result.get("tags", []))
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
+            decoder = json.JSONDecoder()
+            result = decoder.raw_decode(raw)[0]
+        result["topics"] = _normalize_str_items(result.get("topics"))
+        result["concepts"] = _normalize_str_items(result.get("concepts"))
+        result["tags"] = _normalize_str_items(result.get("tags"))
+        raw_intent = result.get("intent", "other")
+        if isinstance(raw_intent, str):
+            raw_intent = raw_intent.lower().strip()
+        elif isinstance(raw_intent, list):
+            raw_intent = (raw_intent[0] or "").lower().strip() if raw_intent else "other"
+        else:
+            raw_intent = str(raw_intent).lower().strip()
+        VALID_INTENTS = {"build","debug","explain","compare","design","optimize","explore","integrate","deploy","troubleshoot","analyze","research","other"}
+        result["intent"] = raw_intent if raw_intent in VALID_INTENTS else "other"
         return conv_id, result
     except Exception as e:
         return conv_id, {
@@ -876,6 +887,15 @@ def api_cluster_kg(cluster_id: str):
     if kg is not None:
         return jsonify(kg)
     return jsonify({"error": "cluster not found"}), 404
+
+
+@app.route("/api/clusters/<cluster_id>/summary")
+def api_cluster_summary(cluster_id: str):
+    from cluster_summary import get_cluster_summary
+    result = get_cluster_summary(cluster_id, request.args.get("model", "llama3.2:3b"))
+    if "error" in result:
+        return jsonify(result), 404
+    return jsonify(result)
 
 
 # ── Main ───────────────────────────────────────────────────────────────────

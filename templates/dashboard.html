@@ -840,6 +840,135 @@ a:hover { text-decoration: underline; }
   position: relative;
 }
 .cluster-graph-container svg { width: 100%; height: 100%; }
+.cluster-content-row {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+.cluster-summary-panel {
+  width: 320px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  display: none;
+}
+.cluster-summary-panel.visible { display: block; }
+.cluster-divider {
+  width: 4px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  background: transparent;
+  transition: background 0.15s;
+  position: relative;
+}
+.cluster-divider:hover,
+.cluster-divider.active { background: var(--accent); }
+.cluster-summary-panel h4 {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.cluster-summary-panel p {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.cluster-summary-takeaways {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px 0;
+}
+.cluster-summary-takeaways li {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding: 3px 0 3px 14px;
+  position: relative;
+}
+.cluster-summary-takeaways li::before {
+  content: '\2713';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+.cluster-summary-rep {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.cluster-summary-rep li {
+  font-size: 12px;
+  padding: 4px 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  position: relative;
+  padding-left: 14px;
+}
+.cluster-summary-rep li::before {
+  content: '\2753';
+  position: absolute;
+  left: 0;
+  font-size: 10px;
+}
+.cluster-summary-rep li:hover { color: var(--accent); }
+.cluster-summary-loading {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 20px 0;
+  text-align: center;
+}
+.sum-dist-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.sum-dist-bars { margin-bottom: 4px; }
+.sum-dist-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.sum-dist-name {
+  width: 80px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.sum-dist-bar-wrap {
+  flex: 1;
+  height: 10px;
+  background: var(--bg-primary);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.sum-dist-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 5px;
+  min-width: 2px;
+  transition: width 0.3s;
+}
+.sum-dist-count {
+  width: 24px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: right;
+  flex-shrink: 0;
+}
 .cluster-pairs-panel {
   max-height: 35vh;
   overflow-y: auto;
@@ -1032,9 +1161,9 @@ a:hover { text-decoration: underline; }
       <div class="filter-tags" id="intent-tags"></div>
     </div>
 
-    <div class="filters" id="model-filters">
-      <h3>Model</h3>
-      <div class="filter-tags" id="model-tags"></div>
+    <div class="filters" id="topic-filters">
+      <h3>Topic</h3>
+      <div class="filter-tags" id="topic-tags"></div>
     </div>
 
     <div class="filters" style="border-bottom:none;padding-top:4px;">
@@ -1123,7 +1252,7 @@ a:hover { text-decoration: underline; }
 <script>
 // ── State ────────────────────────────────────────────────────────────────
 let graphData = null;
-let activeFilters = { intent: new Set(), model: new Set() };
+let activeFilters = { intent: new Set(), topic: new Set() };
 let simulation = null;
 let selectedConvId = null;
 let searchTerm = '';
@@ -1201,14 +1330,14 @@ function renderStats() {
 // ── Filters ───────────────────────────────────────────────────────────────
 function renderFilters() {
   const intents = new Set();
-  const models = new Set();
+  const topics = new Set();
   for (const c of graphData.conversations||[]) {
     if (c.intent) intents.add(c.intent);
-    for (const m of c.models||[]) models.add(m);
+    for (const t of c.topics||[]) if (t) topics.add(t);
   }
 
   renderTagGroup('intent-tags', [...intents].sort(), 'intent');
-  renderTagGroup('model-tags', [...models].sort(), 'model');
+  renderTagGroup('topic-tags', [...topics].sort(), 'topic');
 }
 
 function renderTagGroup(containerId, items, type) {
@@ -1242,10 +1371,10 @@ function refreshFilters() {
     if (i === 0) el.className = 'filter-tag' + (activeFilters.intent.size === 0 ? ' active' : '');
     else el.className = 'filter-tag' + (activeFilters.intent.has(items[i-1]) ? ' active' : '');
   });
-  document.querySelectorAll('#model-tags .filter-tag').forEach((el, i) => {
-    const items = [...new Set(convs.flatMap(c => c.models||[]))].sort();
-    if (i === 0) el.className = 'filter-tag' + (activeFilters.model.size === 0 ? ' active' : '');
-    else el.className = 'filter-tag' + (activeFilters.model.has(items[i-1]) ? ' active' : '');
+  document.querySelectorAll('#topic-tags .filter-tag').forEach((el, i) => {
+    const items = [...new Set(convs.flatMap(c => c.topics||[]).filter(Boolean))].sort();
+    if (i === 0) el.className = 'filter-tag' + (activeFilters.topic.size === 0 ? ' active' : '');
+    else el.className = 'filter-tag' + (activeFilters.topic.has(items[i-1]) ? ' active' : '');
   });
   renderConvList();
   updateGraphVisibility();
@@ -1279,8 +1408,8 @@ function getFilteredConvs() {
   if (activeFilters.intent.size > 0) {
     convs = convs.filter(c => activeFilters.intent.has(c.intent));
   }
-  if (activeFilters.model.size > 0) {
-    convs = convs.filter(c => (c.models||[]).some(m => activeFilters.model.has(m)));
+  if (activeFilters.topic.size > 0) {
+    convs = convs.filter(c => (c.topics||[]).some(t => activeFilters.topic.has(t)));
   }
   if (searchTerm) {
     const t = searchTerm.toLowerCase();
@@ -1296,7 +1425,7 @@ function getFilteredConvs() {
 
 // ── Graph Tabs ────────────────────────────────────────────────────────────
 const tabs = [];
-let activeTabId = 'overview';
+let activeTabId = 'clusters';
 let simulations = {};
 
 function initTabs() {
@@ -1553,7 +1682,7 @@ function isNodeVisible(d) {
         !(conv.summary||'').toLowerCase().includes(t)) return false;
   }
   if (activeFilters.intent.size > 0 && !activeFilters.intent.has(conv.intent)) return false;
-  if (activeFilters.model.size > 0 && !(conv.models||[]).some(m => activeFilters.model.has(m))) return false;
+  if (activeFilters.topic.size > 0 && !(conv.topics||[]).some(t => activeFilters.topic.has(t))) return false;
   return true;
 }
 
@@ -2808,6 +2937,11 @@ function renderClusterExpanded(viewport) {
   }
   if (!cl) { clusterExpandedId = null; renderClustersView(); return; }
 
+  // Reset KG state for fresh default view
+  clusterKgView = false;
+  currentClKGId = null;
+  _clusterKgMode = 'graph';
+
   var ci = clusters.indexOf(cl);
   var col = clusterColor(ci);
 
@@ -2819,14 +2953,30 @@ function renderClusterExpanded(viewport) {
     '<span class="cluster-expanded-meta">' + cl.size + ' Q&A pairs from ' + cl.conversation_count + ' conversations</span>' +
     '<button class="cluster-kg-btn" id="cluster-kg-toggle" onclick="toggleClusterKG(\'' + cl.id + '\')">\u2699 Knowledge Graph</button>' +
     '<button class="cluster-kg-btn" id="cluster-hive-toggle" onclick="toggleClusterKGMode()" style="margin-left:4px;display:none">\u2B21 Hive</button>' +
+    '<button class="cluster-kg-btn" id="cluster-summary-toggle" onclick="toggleClusterSummary(\'' + cl.id + '\')" style="margin-left:4px">\u2139 Summary</button>' +
     '<button class="cluster-kg-btn" id="cluster-pairs-toggle" onclick="toggleClusterPairs()" style="margin-left:4px">Q&amp;A \u25B2</button>';
   viewport.appendChild(header);
 
+  var contentRow = document.createElement('div');
+  contentRow.className = 'cluster-content-row';
+  viewport.appendChild(contentRow);
+
+  var summaryPanel = document.createElement('div');
+  summaryPanel.className = 'cluster-summary-panel';
+  summaryPanel.id = 'cluster-summary-panel';
+  contentRow.appendChild(summaryPanel);
+
+  var divider = document.createElement('div');
+  divider.className = 'cluster-divider';
+  contentRow.appendChild(divider);
+
   var graphDiv = document.createElement('div');
   graphDiv.className = 'cluster-graph-container';
-  viewport.appendChild(graphDiv);
+  contentRow.appendChild(graphDiv);
 
   setTimeout(function() { renderClusterMiniGraph(graphDiv, cl, col); }, 50);
+  setTimeout(function() { toggleClusterKG(cl.id); }, 100);
+  setTimeout(initClusterDivider, 50);
 
   var pairsContainer = document.createElement('div');
   pairsContainer.className = 'cluster-pairs-panel';
@@ -2978,6 +3128,9 @@ function toggleClusterKG(clusterId) {
     btn.textContent = '\u2699 Knowledge Graph';
     var hiveBtn = document.getElementById('cluster-hive-toggle');
     if (hiveBtn) { hiveBtn.style.display = 'none'; }
+    document.getElementById('cluster-summary-panel').classList.remove('visible');
+    var sumBtn = document.getElementById('cluster-summary-toggle');
+    if (sumBtn) sumBtn.classList.remove('active');
     // Re-render mini graph
     var cl = null;
     for (var i = 0; i < clusterData.clusters.length; i++) {
@@ -3003,6 +3156,12 @@ function toggleClusterKG(clusterId) {
 
   var hiveBtn = document.getElementById('cluster-hive-toggle');
   if (hiveBtn) { hiveBtn.style.display = ''; }
+
+  document.getElementById('cluster-summary-panel').classList.add('visible');
+  var sumBtn = document.getElementById('cluster-summary-toggle');
+  if (sumBtn) sumBtn.classList.add('active');
+  document.getElementById('cluster-summary-panel').innerHTML = '<div class="cluster-summary-loading">Generating summary...</div>';
+  fetchClusterSummary(clusterId);
 
   var container = document.querySelector('.cluster-graph-container');
   if (!container) return;
@@ -3282,6 +3441,119 @@ function renderClusterHive(container, data) {
     legendG.append('circle').attr('cx', 12).attr('cy', ly).attr('r', 4).attr('fill', typeColor(t));
     legendG.append('text').attr('x', 22).attr('y', ly + 4).attr('font-size', 9)
       .attr('fill', 'var(--text-muted)').text(t.replace(/_/g, ' ') + ' (' + (typeGroups[t] || []).length + ')');
+  });
+}
+
+// ── Cluster Summary ──────────────────────────────────────────────────────────
+var clusterSummaryCache = {};
+
+function fetchClusterSummary(clusterId) {
+  if (clusterSummaryCache[clusterId]) {
+    renderClusterSummary(clusterSummaryCache[clusterId]);
+    return;
+  }
+  var panel = document.getElementById('cluster-summary-panel');
+  if (!panel) return;
+  panel.innerHTML = '<div class="cluster-summary-loading">Generating summary...</div>';
+  fetch('/api/clusters/' + encodeURIComponent(clusterId) + '/summary')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data && data.summary && data.summary !== 'Could not generate summary.') {
+        clusterSummaryCache[clusterId] = data;
+        renderClusterSummary(data);
+      } else {
+        panel.innerHTML = '<div class="cluster-summary-loading">No summary available.</div>';
+      }
+    })
+    .catch(function() {
+      panel.innerHTML = '<div class="cluster-summary-loading">Failed to load summary.</div>';
+    });
+}
+
+function renderClusterSummary(data) {
+  var panel = document.getElementById('cluster-summary-panel');
+  if (!panel) return;
+  var html = '<h4>Summary</h4><p>' + esc(data.summary) + '</p>';
+  if (data.takeaways && data.takeaways.length > 0) {
+    html += '<h4>Key Takeaways</h4><ul class="cluster-summary-takeaways">';
+    data.takeaways.forEach(function(t) { html += '<li>' + esc(t) + '</li>'; });
+    html += '</ul>';
+  }
+  if (data.representative_questions && data.representative_questions.length > 0) {
+    html += '<h4>Representative Questions</h4><ul class="cluster-summary-rep">';
+    data.representative_questions.forEach(function(q) { html += '<li>' + esc(q) + '</li>'; });
+    html += '</ul>';
+  }
+  // Distribution
+  var dist = data.distribution;
+  if (dist) {
+    html += '<h4 style="margin-top:14px;">Distribution</h4>';
+    if (dist.intents && dist.intents.length > 0) {
+      html += '<div class="sum-dist-label">Intent</div><div class="sum-dist-bars">';
+      dist.intents.forEach(function(d) {
+        html += '<div class="sum-dist-row"><span class="sum-dist-name">' + esc(d.name) + '</span><div class="sum-dist-bar-wrap"><div class="sum-dist-bar" style="width:' + d.pct + '%"></div></div><span class="sum-dist-count">' + d.count + '</span></div>';
+      });
+      html += '</div>';
+    }
+    if (dist.topics && dist.topics.length > 0) {
+      html += '<div class="sum-dist-label" style="margin-top:8px;">Topics</div><div class="sum-dist-bars">';
+      dist.topics.forEach(function(d) {
+        html += '<div class="sum-dist-row"><span class="sum-dist-name">' + esc(d.name) + '</span><div class="sum-dist-bar-wrap"><div class="sum-dist-bar" style="width:' + d.pct + '%"></div></div><span class="sum-dist-count">' + d.count + '</span></div>';
+      });
+      html += '</div>';
+    }
+    if (dist.concepts && dist.concepts.length > 0) {
+      html += '<div class="sum-dist-label" style="margin-top:8px;">Entity Types</div><div class="sum-dist-bars">';
+      dist.concepts.forEach(function(d) {
+        html += '<div class="sum-dist-row"><span class="sum-dist-name">' + esc(d.name.replace(/_/g,' ')) + '</span><div class="sum-dist-bar-wrap"><div class="sum-dist-bar" style="width:' + d.pct + '%"></div></div><span class="sum-dist-count">' + d.count + '</span></div>';
+      });
+      html += '</div>';
+    }
+  }
+  panel.innerHTML = html;
+}
+
+function toggleClusterSummary(clusterId) {
+  var panel = document.getElementById('cluster-summary-panel');
+  if (!panel) return;
+  var btn = document.getElementById('cluster-summary-toggle');
+  if (!btn) return;
+  var hidden = !panel.classList.contains('visible');
+  if (hidden) {
+    panel.classList.add('visible');
+    btn.classList.add('active');
+    fetchClusterSummary(clusterId);
+  } else {
+    panel.classList.remove('visible');
+    btn.classList.remove('active');
+  }
+}
+
+// ── Divider Drag Resize ──────────────────────────────────────────────────────
+function initClusterDivider() {
+  var divider = document.querySelector('.cluster-divider');
+  var panel = document.getElementById('cluster-summary-panel');
+  if (!divider || !panel) return;
+  var dragging = false;
+  divider.addEventListener('mousedown', function(ev) {
+    dragging = true;
+    divider.classList.add('active');
+    ev.preventDefault();
+  });
+  document.addEventListener('mousemove', function(ev) {
+    if (!dragging) return;
+    var row = divider.parentElement;
+    var rect = row.getBoundingClientRect();
+    var newW = ev.clientX - rect.left;
+    if (newW < 200) newW = 200;
+    if (newW > rect.width - 100) newW = rect.width - 100;
+    panel.style.width = newW + 'px';
+  });
+  document.addEventListener('mouseup', function() {
+    if (dragging) {
+      dragging = false;
+      divider.classList.remove('active');
+    }
   });
 }
 
