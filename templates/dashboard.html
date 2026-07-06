@@ -1443,6 +1443,7 @@ function refreshFilters() {
 // ── Conversation list ─────────────────────────────────────────────────────
 function renderConvList() {
   const list = document.getElementById('conv-list');
+  if (!list) return;
   list.innerHTML = '';
   const filtered = getFilteredConvs();
   for (const c of filtered) {
