@@ -1189,7 +1189,7 @@ function getNodeRadius(d) {
 }
 
 // ── Subgraph with 3-level drill-down ────────────────────────────────────
-let sgState = { view: 'overview', intentKey: null, subIntentKey: null, data: null, topicFilter: '' };
+let sgState = { view: 'overview', intentKey: null, subIntentKey: null, data: null, topicFilter: '', queryFilter: '' };
 
 function renderSubgraph(data, viewport) {
   sgState.data = data;
@@ -1197,6 +1197,7 @@ function renderSubgraph(data, viewport) {
   sgState.intentKey = null;
   sgState.subIntentKey = null;
   sgState.topicFilter = '';
+  sgState.queryFilter = '';
   renderSGView(viewport);
 }
 
@@ -1222,12 +1223,17 @@ function renderSGView(viewport) {
   }
 }
 
-function getFilteredGroups(groups, topicFilter) {
-  if (!topicFilter) return groups;
+function getFilteredGroups(groups, topicFilter, queryFilter) {
+  if (!topicFilter && !queryFilter) return groups;
   const result = {};
   for (const [key, g] of Object.entries(groups)) {
     const msgs = g.queries || g || [];
-    const matching = msgs.filter(m => (m.topics||[]).some(t => t.toLowerCase().includes(topicFilter.toLowerCase())));
+    const matching = msgs.filter(m => {
+      let ok = true;
+      if (topicFilter) ok = ok && (m.topics||[]).some(t => t.toLowerCase().includes(topicFilter.toLowerCase()));
+      if (queryFilter) ok = ok && (m.content||'').toLowerCase().includes(queryFilter.toLowerCase());
+      return ok;
+    });
     if (matching.length > 0) {
       result[key] = { ...g, queries: matching, count: matching.length };
     }
@@ -1241,9 +1247,9 @@ function renderSGOverview(data, viewport, w, h) {
   const panelH = h - graphH - filterH;
   const conv = data.conversation || {};
   const allGroups = data.message_groups || {};
-  const groups = getFilteredGroups(allGroups, sgState.topicFilter);
+  const groups = getFilteredGroups(allGroups, sgState.topicFilter, sgState.queryFilter);
 
-  // ── Topic filter bar ──
+  // ── Filter bar: search + topic chips ──
   const allTopics = new Set();
   for (const g of Object.values(allGroups)) {
     const msgs = g.queries || g || [];
@@ -1251,17 +1257,33 @@ function renderSGOverview(data, viewport, w, h) {
       for (const t of (m.topics||[])) allTopics.add(t);
     }
   }
+  const activeCount = Object.values(groups).reduce((s, g) => s + ((g.queries || g || []).length), 0);
   const filterBar = d3.select(viewport).append('div')
-    .style('display','flex').style('gap','4px').style('padding','4px 12px')
+    .style('display','flex').style('flex-wrap','wrap').style('gap','4px').style('padding','4px 12px')
     .style('background','var(--bg-secondary)').style('border-bottom','1px solid var(--border)')
-    .style('height', filterH + 'px').style('align-items','center').style('overflow-x','auto');
-  filterBar.append('span').text('Topics:').style('color','var(--text-muted)').style('font-size','11px').style('margin-right','4px');
+    .style('align-items','center').style('overflow-x','auto');
+
+  // Search input
+  const searchInput = filterBar.append('input')
+    .attr('type','text').attr('placeholder','Search queries...')
+    .style('background','var(--bg-primary)').style('border','1px solid var(--border)')
+    .style('border-radius','4px').style('padding','3px 8px').style('font-size','11px')
+    .style('color','var(--text-secondary)').style('width','160px').style('outline','none')
+    .property('value', sgState.queryFilter)
+    .on('input', function() { sgState.queryFilter = this.value; renderSGView(viewport); });
+
+  // Topic chips
+  filterBar.append('span').text('Topics:').style('color','var(--text-muted)').style('font-size','11px').style('margin-left','8px').style('margin-right','2px');
   const allChip = filterBar.append('span').attr('class','filter-tag' + (sgState.topicFilter ? '' : ' active'))
     .text('All').on('click', () => { sgState.topicFilter = ''; renderSGView(viewport); });
   for (const t of [...allTopics].sort()) {
     filterBar.append('span').attr('class','filter-tag' + (sgState.topicFilter === t ? ' active' : ''))
       .text(t).on('click', () => { sgState.topicFilter = sgState.topicFilter === t ? '' : t; renderSGView(viewport); });
   }
+
+  // Count badge
+  filterBar.append('span').style('margin-left','auto').style('color','var(--text-dim)').style('font-size','10px')
+    .text(activeCount + ' shown');
 
   // ── Overview graph ──
   const svg = d3.select(viewport).append('svg').attr('width', w).attr('height', graphH).style('display', 'block');
@@ -1393,8 +1415,9 @@ function renderSGIntent(data, viewport, w, h) {
     col = intentColor(intentKey);
     parentForBreadcrumb = null;
   }
-  if (sgState.topicFilter && Array.isArray(msgs)) {
-    msgs = msgs.filter(m => (m.topics||[]).some(t => t.toLowerCase().includes(sgState.topicFilter.toLowerCase())));
+  if (Array.isArray(msgs)) {
+    if (sgState.topicFilter) msgs = msgs.filter(m => (m.topics||[]).some(t => t.toLowerCase().includes(sgState.topicFilter.toLowerCase())));
+    if (sgState.queryFilter) msgs = msgs.filter(m => (m.content||'').toLowerCase().includes(sgState.queryFilter.toLowerCase()));
   }
 
   // ── Breadcrumb bar ──
@@ -1407,6 +1430,26 @@ function renderSGIntent(data, viewport, w, h) {
   breadHtml += `<span style="color:var(--text-muted);font-size:11px;margin-left:6px;">${msgs.length} queries</span>`;
 
   const bread = d3.select(viewport).append('div').attr('class', 'sg-breadcrumb').html(breadHtml);
+
+  // Filter bar (search + topic chips)
+  const allTopicsHere = [...new Set(msgs.flatMap(m => m.topics||[]))];
+  const intentFilterBar = d3.select(viewport).append('div')
+    .style('display','flex').style('gap','4px').style('padding','2px 12px')
+    .style('background','var(--bg-secondary)').style('border-bottom','1px solid var(--border)')
+    .style('align-items','center').style('flex-shrink','0');
+  intentFilterBar.append('input').attr('type','text').attr('placeholder','Search queries...')
+    .style('background','var(--bg-primary)').style('border','1px solid var(--border)')
+    .style('border-radius','4px').style('padding','3px 8px').style('font-size','11px')
+    .style('color','var(--text-secondary)').style('width','160px').style('outline','none')
+    .property('value', sgState.queryFilter)
+    .on('input', function() { sgState.queryFilter = this.value; renderSGView(viewport); });
+  intentFilterBar.append('span').style('color','var(--text-muted)').style('font-size','11px').style('margin-left','8px').text('Topics:');
+  for (const t of allTopicsHere.sort()) {
+    intentFilterBar.append('span').attr('class','filter-tag' + (sgState.topicFilter === t ? ' active' : ''))
+      .text(t).on('click', () => { sgState.topicFilter = sgState.topicFilter === t ? '' : t; renderSGView(viewport); });
+  }
+  intentFilterBar.append('span').style('margin-left','auto').style('color','var(--text-dim)').style('font-size','10px')
+    .text(msgs.length + ' shown');
 
   // ── Intent-focused graph ──
   const svg = d3.select(viewport).append('svg').attr('width', w).attr('height', graphH).style('display', 'block');
@@ -1499,11 +1542,28 @@ function openConversationDetail(convId) {
 
 // ── Sub-intent grouping view (third level) ───────────────────────────────
 function renderSGSubIntents(data, viewport, w, h) {
-  const graphH = Math.floor(h * 0.45);
-  const panelH = h - graphH;
+  const graphH = Math.floor(h * 0.4);
+  const filterH = 32;
+  const panelH = h - graphH - filterH;
   const conv = data.conversation || {};
   const group = (data.message_groups||{})[sgState.intentKey] || {};
-  const subGroups = group.sub_groups || {};
+  const allSubGroups = group.sub_groups || {};
+
+  // Filter sub-groups by query
+  let subGroups = allSubGroups;
+  if (sgState.queryFilter) {
+    subGroups = {};
+    for (const [k, msgs] of Object.entries(allSubGroups)) {
+      const filtered = msgs.filter(m => (m.content||'').toLowerCase().includes(sgState.queryFilter.toLowerCase()));
+      if (filtered.length > 0) subGroups[k] = filtered;
+    }
+  }
+  if (sgState.topicFilter) {
+    for (const [k, msgs] of Object.entries(subGroups)) {
+      subGroups[k] = msgs.filter(m => (m.topics||[]).some(t => t.toLowerCase().includes(sgState.topicFilter.toLowerCase())));
+    }
+    subGroups = Object.fromEntries(Object.entries(subGroups).filter(([_, v]) => v.length > 0));
+  }
   const col = intentColor(sgState.intentKey);
 
   const bread = d3.select(viewport).append('div').attr('class', 'sg-breadcrumb').html(`
@@ -1512,6 +1572,21 @@ function renderSGSubIntents(data, viewport, w, h) {
     <span class="sg-intent-tag" style="background:${col}22;color:${col};display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;">${esc(sgState.intentKey)}</span>
     <span style="color:var(--text-muted);font-size:11px;margin-left:6px;">${Object.keys(subGroups).length} sub-groups</span>
   `);
+
+  // Filter bar
+  const filterBar = d3.select(viewport).append('div')
+    .style('display','flex').style('gap','4px').style('padding','2px 12px')
+    .style('background','var(--bg-secondary)').style('border-bottom','1px solid var(--border)')
+    .style('align-items','center').style('flex-shrink','0');
+  filterBar.append('input').attr('type','text').attr('placeholder','Search queries...')
+    .style('background','var(--bg-primary)').style('border','1px solid var(--border)')
+    .style('border-radius','4px').style('padding','3px 8px').style('font-size','11px')
+    .style('color','var(--text-secondary)').style('width','160px').style('outline','none')
+    .property('value', sgState.queryFilter)
+    .on('input', function() { sgState.queryFilter = this.value; renderSGView(viewport); });
+  const subTotal = Object.values(subGroups).reduce((s, v) => s + v.length, 0);
+  filterBar.append('span').style('margin-left','auto').style('color','var(--text-dim)').style('font-size','10px')
+    .text(subTotal + ' shown');
 
   const svg = d3.select(viewport).append('svg').attr('width', w).attr('height', graphH).style('display', 'block');
   const g = svg.append('g');
