@@ -215,6 +215,7 @@ def save_cache(cache: dict) -> None:
 # ── Knowledge Graph Builder ─────────────────────────────────────────────────
 
 def build_knowledge_graph(convs: list[dict]) -> dict:
+    from notes_store import load_notes
     cache = build_cache()
     changed = False
 
@@ -378,6 +379,10 @@ def build_knowledge_graph(convs: list[dict]) -> dict:
                 hg.edges.append(Edge(source=cid, target=mid, relation="uses", key=edge_key))
                 edge_key += 1
 
+    # Attach journal notes to the graph
+    from notes_store import attach_notes_to_graph
+    attach_notes_to_graph(hg)
+
     result = hg.to_node_link_dict()
     result["conversations"] = conversations
     result["stats"] = {
@@ -386,6 +391,7 @@ def build_knowledge_graph(convs: list[dict]) -> dict:
         "concepts": len(concepts),
         "intents": len(intents),
         "models": list(models.keys()),
+        "notes": len(load_notes()),
         "total_messages": sum(c["message_count"] for c in conversations),
     }
     return result
@@ -896,6 +902,38 @@ def api_cluster_summary(cluster_id: str):
     if "error" in result:
         return jsonify(result), 404
     return jsonify(result)
+
+
+# ── Notes API ─────────────────────────────────────────────────────────────────
+
+@app.route("/api/notes", methods=["GET", "POST"])
+def api_notes():
+    if request.method == "POST":
+        from notes_store import create_note
+        data = request.json or {}
+        title = (data.get("title") or "").strip()
+        content = (data.get("content") or "").strip()
+        if not title or not content:
+            return jsonify({"error": "title and content required"}), 400
+        links = data.get("links", [])
+        note = create_note(title, content, links, model=_current_model)
+        return jsonify(note), 201
+    from notes_store import load_notes
+    notes = load_notes()
+    return jsonify(notes)
+
+
+@app.route("/api/notes/<note_id>", methods=["GET", "DELETE"])
+def api_note_detail(note_id: str):
+    from notes_store import get_note, delete_note
+    if request.method == "DELETE":
+        if delete_note(note_id):
+            return jsonify({"status": "deleted"})
+        return jsonify({"error": "not found"}), 404
+    note = get_note(note_id)
+    if note:
+        return jsonify(note)
+    return jsonify({"error": "not found"}), 404
 
 
 # ── Main ───────────────────────────────────────────────────────────────────

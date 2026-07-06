@@ -414,6 +414,7 @@ a:hover { text-decoration: underline; }
 .node-answer { fill: #79c0ff; background: #79c0ff; }
 .node-summary { fill: var(--text-muted); background: var(--text-muted); }
 .node-tag { fill: var(--text-dim); background: var(--text-dim); }
+.node-note { fill: #ff9bce; background: #ff9bce; }
 
 /* Graph tab bar */
 .graph-area { display: flex; flex-direction: column; flex: 1; overflow: hidden; position: relative; }
@@ -1174,9 +1175,17 @@ a:hover { text-decoration: underline; }
       <div class="filter-expand" id="topic-expand" style="font-size:11px;color:var(--accent);cursor:pointer;padding:4px 0 0 4px;" onclick="toggleTopicExpand()">Show all</div>
     </div>
 
-    <div class="filters" style="border-bottom:none;padding-top:4px;">
+    <div class="filters">
       <h3>Analysis Model</h3>
       <div style="display:flex;gap:4px;margin-top:4px;" id="analysis-model-selector"></div>
+    </div>
+
+    <div class="filters" id="notes-section" style="border-bottom:none;">
+      <h3>Journal Notes <span style="font-weight:400;color:var(--text-dim);font-size:10px;text-transform:none;letter-spacing:0;" id="notes-count"></span></h3>
+      <div style="display:flex;gap:4px;margin-bottom:6px;">
+        <button class="btn" style="flex:1;font-size:11px;padding:4px 8px;" onclick="showNoteModal()">+ New Note</button>
+      </div>
+      <div id="notes-list" style="max-height:140px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;"></div>
     </div>
 
     <div class="conv-list" id="conv-list"></div>
@@ -1199,6 +1208,7 @@ a:hover { text-decoration: underline; }
           <div class="legend-item"><span class="legend-dot node-model"></span>Model</div>
           <div class="legend-item"><span class="legend-dot node-query"></span>Query</div>
           <div class="legend-item"><span class="legend-dot node-answer"></span>Answer</div>
+          <div class="legend-item"><span class="legend-dot node-note"></span>Notes</div>
         </div>
         <div class="controls-hint">Scroll to zoom · Drag to pan · Drag nodes</div>
       </div>
@@ -1257,6 +1267,40 @@ a:hover { text-decoration: underline; }
   </div>
 </div>
 
+<!-- Note Modal -->
+<div class="modal-overlay" id="note-modal">
+  <div class="modal" style="width:480px;">
+    <div class="modal-header">
+      <h2>New Journal Note</h2>
+      <button class="detail-close" onclick="closeNoteModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="note-status"></div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <input type="text" id="note-title" placeholder="Note title..."
+          style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary);color:var(--text-secondary);font-size:13px;outline:none;" />
+        <textarea id="note-content" placeholder="Write your note..."
+          style="width:100%;min-height:120px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary);color:var(--text-secondary);font-size:12px;resize:vertical;outline:none;font-family:inherit;"></textarea>
+        <div>
+          <div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap;" id="note-links-container"></div>
+          <div style="display:flex;gap:4px;">
+            <input type="text" id="note-link-input" placeholder="Add a web link..."
+              style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary);color:var(--text-secondary);font-size:12px;outline:none;" />
+            <button class="btn" style="font-size:11px;padding:4px 10px;" onclick="addNoteLink()">+Link</button>
+          </div>
+        </div>
+        <div class="drop-zone" id="note-drop-zone" style="padding:16px;text-align:center;border:1px dashed var(--border);border-radius:6px;cursor:pointer;">
+          <p style="font-size:11px;color:var(--text-muted);">Drop screenshots or images here</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeNoteModal()">Cancel</button>
+      <button class="btn btn-primary" id="note-save-btn" onclick="saveNote()">Save Note</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ────────────────────────────────────────────────────────────────
 let graphData = null;
@@ -1267,6 +1311,7 @@ let searchTerm = '';
 
 // ── Load data ────────────────────────────────────────────────────────────
 function loadData() {
+  renderNotesList();
   var p = fetch('/api/graph').then(function(r) { return r.json(); });
   p.then(function(d) {
     graphData = d;
@@ -1738,6 +1783,7 @@ function getNodeType(n) {
   if (n.concept_type === 'assistant') return 'answer';
   if (n.concept_type === 'tag') return 'tag';
   if (n.concept_type === 'summary') return 'summary';
+  if (n.concept_type === 'note') return 'note';
   return 'concept';
 }
 
@@ -1752,7 +1798,8 @@ function getNodeColor(d) {
     case 'answer': return '#79c0ff';
     case 'tag': return 'var(--text-dim)';
     case 'summary': return 'var(--text-muted)';
-    default: return 'var(--text-muted)';
+    case 'note':         return '#ff9bce';
+    default:             return 'var(--text-muted)';
   }
 }
 
@@ -1765,7 +1812,8 @@ function getNodeRadius(d) {
     case 'model': return 10;
     case 'query': return 10;
     case 'answer': return 10;
-    default: return 7;
+    case 'note':         return 10;
+    default:             return 7;
   }
 }
 
@@ -2697,6 +2745,152 @@ function esc(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+// ── Journal Notes ────────────────────────────────────────────────────────────
+var noteLinks = [];
+
+function showNoteModal() {
+  document.getElementById('note-title').value = '';
+  document.getElementById('note-content').value = '';
+  document.getElementById('note-link-input').value = '';
+  document.getElementById('note-links-container').innerHTML = '';
+  document.getElementById('note-status').innerHTML = '';
+  document.getElementById('note-save-btn').disabled = false;
+  document.getElementById('note-save-btn').textContent = 'Save Note';
+  noteLinks = [];
+  document.getElementById('note-modal').classList.add('open');
+}
+
+function closeNoteModal() {
+  document.getElementById('note-modal').classList.remove('open');
+}
+
+function addNoteLink() {
+  var input = document.getElementById('note-link-input');
+  var url = input.value.trim();
+  if (!url) return;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) url = 'https://' + url;
+  noteLinks.push(url);
+  var tag = document.createElement('span');
+  tag.className = 'filter-tag';
+  tag.style.cssText = 'font-size:10px;padding:2px 6px;cursor:default;';
+  tag.textContent = url.length > 40 ? url.slice(0,40) + '...' : url;
+  tag.title = url;
+  var close = document.createElement('span');
+  close.textContent = ' \u00d7';
+  close.style.cssText = 'cursor:pointer;margin-left:2px;';
+  close.onclick = function() {
+    var idx = noteLinks.indexOf(url);
+    if (idx >= 0) noteLinks.splice(idx, 1);
+    tag.remove();
+  };
+  tag.appendChild(close);
+  document.getElementById('note-links-container').appendChild(tag);
+  input.value = '';
+}
+
+function saveNote() {
+  var title = document.getElementById('note-title').value.trim();
+  var content = document.getElementById('note-content').value.trim();
+  if (!title || !content) {
+    document.getElementById('note-status').innerHTML = '<div class="modal-status error">Title and content are required.</div>';
+    return;
+  }
+  var btn = document.getElementById('note-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Extracting...';
+  fetch('/api/notes', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({title: title, content: content, links: noteLinks}),
+  }).then(function(r) { return r.json(); }).then(function(note) {
+    closeNoteModal();
+    renderNotesList();
+    if (typeof renderStats === 'function') renderStats();
+    refreshGraph();
+  }).catch(function(e) {
+    document.getElementById('note-status').innerHTML = '<div class="modal-status error">' + esc(e.message) + '</div>';
+    btn.disabled = false;
+    btn.textContent = 'Save Note';
+  });
+}
+
+function renderNotesList() {
+  var list = document.getElementById('notes-list');
+  if (!list) return;
+  var count = document.getElementById('notes-count');
+  fetch('/api/notes').then(function(r) { return r.json(); }).then(function(notes) {
+    list.innerHTML = '';
+    if (count) count.textContent = '(' + notes.length + ')';
+    if (!notes.length) {
+      list.innerHTML = '<div style="font-size:11px;color:var(--text-dim);padding:4px 0;">No notes yet.</div>';
+      return;
+    }
+    notes.slice(-5).reverse().forEach(function(n) {
+      var el = document.createElement('div');
+      el.style.cssText = 'font-size:11px;padding:4px 6px;border-radius:4px;cursor:pointer;color:var(--text-secondary);background:var(--bg-primary);border:1px solid var(--border);transition:border-color 0.15s;';
+      el.onmouseenter = function() { el.style.borderColor = 'var(--accent)'; };
+      el.onmouseleave = function() { el.style.borderColor = 'var(--border)'; };
+      el.onclick = function() { openNoteDetail(n.id); };
+      var ext = n.extraction || {};
+      var tags = (ext.topics || []).slice(0,2).map(function(t) { return '<span style="font-size:9px;padding:1px 4px;border-radius:4px;background:var(--bg-tertiary);color:var(--text-dim);">' + esc(t) + '</span>'; }).join('');
+      el.innerHTML = '<div style="display:flex;justify-content:space-between;"><span style="font-weight:600;">' + esc(n.title) + '</span><span style="color:var(--text-dim);font-size:10px;">' + n.date + '</span></div>' +
+        (tags ? '<div style="margin-top:2px;display:flex;gap:2px;">' + tags + '</div>' : '');
+      list.appendChild(el);
+    });
+  }).catch(function() {});
+}
+
+function openNoteDetail(noteId) {
+  fetch('/api/notes/' + noteId).then(function(r) { return r.json(); }).then(function(note) {
+    var ext = note.extraction || {};
+    var html = '<div class="detail-header" style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">' +
+      '<h2 style="font-size:15px;color:var(--text-primary);">' + esc(note.title) + '</h2>' +
+      '<div style="display:flex;gap:4px;">' +
+        '<button class="btn" style="font-size:10px;padding:3px 8px;color:var(--red);" onclick="deleteNote(\'' + note.id + '\')">Delete</button>' +
+        '<button class="btn" style="font-size:10px;padding:3px 8px;" onclick="closeDetail()">\u2715</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="detail-body" style="padding:14px 16px;">' +
+      '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">' + note.date + '</div>' +
+      '<div style="font-size:13px;color:var(--text-secondary);line-height:1.6;white-space:pre-wrap;word-break:break-word;margin-bottom:12px;">' + esc(note.content) + '</div>';
+    if (note.links && note.links.length) {
+      html += '<div style="margin-bottom:12px;"><span style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.3px;">Links</span><div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;">' +
+        note.links.map(function(l) { return '<a href="' + esc(l) + '" target="_blank" style="font-size:12px;color:var(--accent);">' + esc(l) + '</a>'; }).join('') +
+        '</div></div>';
+    }
+    if (ext.topics && ext.topics.length) {
+      html += '<div style="margin-bottom:8px;"><span style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.3px;">Topics</span><div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap;">' +
+        ext.topics.map(function(t) { return '<span class="filter-tag" style="font-size:10px;padding:2px 6px;cursor:default;">' + esc(t) + '</span>'; }).join('') +
+        '</div></div>';
+    }
+    if (ext.concepts && ext.concepts.length) {
+      html += '<div style="margin-bottom:8px;"><span style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.3px;">Concepts</span><div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap;">' +
+        ext.concepts.map(function(c) { return '<span class="filter-tag" style="font-size:10px;padding:2px 6px;cursor:default;">' + esc(c) + '</span>'; }).join('') +
+        '</div></div>';
+    }
+    if (ext.intent) {
+      html += '<div style="margin-bottom:8px;"><span style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.3px;">Intent</span><div style="margin-top:4px;"><span class="sg-intent-tag" style="background:var(--accent-bg);color:var(--accent);">' + esc(ext.intent) + '</span></div></div>';
+    }
+    html += '</div>';
+    var panel = document.getElementById('detail-panel');
+    panel.innerHTML = html;
+    panel.classList.add('open');
+  }).catch(function() {});
+}
+
+function deleteNote(noteId) {
+  if (!confirm('Delete this note?')) return;
+  fetch('/api/notes/' + noteId, {method: 'DELETE'}).then(function(r) { return r.json(); }).then(function() {
+    closeDetail();
+    renderNotesList();
+    refreshGraph();
+  }).catch(function() {});
+}
+
+function refreshGraph() {
+  if (typeof loadData === 'function') loadData();
 }
 
 // ── Log Panel ─────────────────────────────────────────────────────────────

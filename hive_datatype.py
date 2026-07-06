@@ -170,6 +170,8 @@ class Node:
                 d["source_paper"] = self.source_paper
         elif self.is_concept:
             d["definition"] = self.definition[:MAX_DEFINITION_LEN]
+            if self.concept_type != "concept":
+                d["concept_type"] = self.concept_type
         return d
 
     @classmethod

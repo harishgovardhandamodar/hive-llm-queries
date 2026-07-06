@@ -4,7 +4,7 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir flask requests numpy
 
-COPY app.py intent_engine.py knowledge_store.py cluster_store.py cluster_kg.py cluster_summary.py prebuild_cache.py hive_datatype.py ./
+COPY app.py intent_engine.py knowledge_store.py cluster_store.py cluster_kg.py cluster_summary.py prebuild_cache.py hive_datatype.py notes_store.py ./
 COPY templates/ templates/
 COPY static/ static/
 
