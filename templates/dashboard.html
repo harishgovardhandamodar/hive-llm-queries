@@ -945,13 +945,16 @@ async function openConversationTab(convId) {
 }
 
 function renderActiveGraph() {
-  const svg = d3.select('#graph-svg');
-  svg.selectAll('*').remove();
+  const viewport = document.getElementById('graph-viewport');
+  // Clear everything
+  viewport.innerHTML = '';
 
   const tab = tabs.find(t => t.id === activeTabId);
   if (!tab) return;
 
   if (tab.loading) {
+    const svg = d3.select(viewport).append('svg')
+      .attr('width', '100%').attr('height', '100%');
     svg.append('text')
       .attr('x', '50%').attr('y', '50%')
       .attr('text-anchor', 'middle').attr('fill', 'var(--text-muted)')
@@ -961,6 +964,8 @@ function renderActiveGraph() {
   }
 
   if (tab.error) {
+    const svg = d3.select(viewport).append('svg')
+      .attr('width', '100%').attr('height', '100%');
     svg.append('text')
       .attr('x', '50%').attr('y', '50%')
       .attr('text-anchor', 'middle').attr('fill', 'var(--red)')
@@ -970,9 +975,12 @@ function renderActiveGraph() {
   }
 
   if (tab.type === 'overview') {
-    renderOverviewGraph();
+    // Create SVG that fills the full viewport
+    const svg = d3.select(viewport).append('svg')
+      .attr('width', '100%').attr('height', '100%');
+    renderOverviewGraph(svg.node());
   } else if (tab.type === 'subgraph' && tab.data) {
-    renderSubgraph(tab.data);
+    renderSubgraph(tab.data, viewport);
   }
 }
 
@@ -982,9 +990,12 @@ function getGraphDimensions() {
 }
 
 // ── Overview Graph ─────────────────────────────────────────────────────────
-function renderOverviewGraph() {
-  const { width, height } = getGraphDimensions();
-  const svg = d3.select('#graph-svg').attr('width', width).attr('height', height);
+function renderOverviewGraph(svgNode) {
+  const vp = document.getElementById('graph-viewport');
+  const width = vp.clientWidth || 800;
+  const height = vp.clientHeight || 600;
+
+  const svg = d3.select(svgNode).attr('width', width).attr('height', height);
   const g = svg.append('g');
 
   if (!graphData || !graphData.nodes || !graphData.nodes.length) {
@@ -1076,7 +1087,7 @@ function isNodeVisible(d) {
 
 function updateGraphVisibility() {
   if (activeTabId === 'overview') {
-    const svg = d3.select('#graph-svg');
+    const svg = d3.select('#graph-viewport > svg');
     svg.selectAll('circle').attr('opacity', d => isNodeVisible(d) ? 1 : 0.08);
     svg.selectAll('text').attr('opacity', d => isNodeVisible(d) ? 0.8 : 0);
     svg.selectAll('text.title-label').attr('opacity', d => isNodeVisible(d) ? 0.9 : 0);
@@ -1124,18 +1135,15 @@ function getNodeRadius(d) {
 }
 
 // ── Subgraph (split view: graph + grouped message panel) ─────────────────
-function renderSubgraph(data) {
-  const { width, height } = getGraphDimensions();
-  // Reserve bottom 45% for message panel
-  const graphH = Math.floor(height * 0.55);
-  const panelH = height - graphH;
+function renderSubgraph(data, viewport) {
+  const vpHeight = viewport.clientHeight || 600;
+  const vpWidth = viewport.clientWidth || 800;
+  const graphH = Math.floor(vpHeight * 0.55);
+  const panelH = vpHeight - graphH;
 
-  const container = d3.select('#graph-svg');
-  container.selectAll('*').remove();
-  container.selectAll('.subgraph-panel').remove();
-
-  // ── Graph section ──
-  const svg = container.append('svg').attr('width', width).attr('height', graphH);
+  const svg = d3.select(viewport).append('svg')
+    .attr('width', vpWidth).attr('height', graphH)
+    .style('display', 'block');
   const g = svg.append('g');
 
   const zoom = d3.zoom().scaleExtent([0.2, 4])
@@ -1184,7 +1192,7 @@ function renderSubgraph(data) {
   });
 
   // ── Grouped message panel ──
-  const panel = container.append('div').attr('class', 'subgraph-panel')
+  const panel = d3.select(viewport).append('div').attr('class', 'subgraph-panel')
     .style('height', panelH + 'px').style('overflow-y', 'auto');
 
   const conv = data.conversation || {};
@@ -1236,16 +1244,13 @@ function intentColor(intent) {
 
 function highlightSubgraphNode(msgIdx, data) {
   const msgId = `msg_${data.conversation.id}_${msgIdx}`;
-  const svg = d3.select('#graph-svg svg');
-  // Reset all
+  const svg = d3.select('#graph-viewport > svg');
   svg.selectAll('circle').attr('opacity', 0.3).attr('stroke-width', 1);
   svg.selectAll('line').attr('stroke-opacity', 0.15);
-  // Highlight the selected message node and its connected edges
   svg.selectAll('circle').filter(d => d && d.id === msgId)
     .attr('opacity', 1).attr('stroke', '#fff').attr('stroke-width', 3);
   svg.selectAll('line').filter(d => d && (d.source.id === msgId || d.target.id === msgId))
     .attr('stroke-opacity', 0.8);
-  // Find answer node too
   const answerIdx = msgIdx + 1;
   if (answerIdx < (data.messages||[]).length) {
     const ansId = `msg_${data.conversation.id}_${answerIdx}`;
