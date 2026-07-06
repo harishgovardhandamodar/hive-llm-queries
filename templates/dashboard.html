@@ -1285,9 +1285,6 @@ function getFilteredGroups(groups, topicFilter, queryFilter) {
 }
 
 function renderSGOverview(data, viewport, w, h) {
-  const graphH = Math.floor(h * 0.4);
-  const filterH = 32;
-  const panelH = h - graphH - filterH;
   const conv = data.conversation || {};
   const allGroups = data.message_groups || {};
   const groups = getFilteredGroups(allGroups, sgState.topicFilter, sgState.queryFilter);
@@ -1304,9 +1301,8 @@ function renderSGOverview(data, viewport, w, h) {
   const filterBar = d3.select(viewport).append('div')
     .style('display','flex').style('flex-wrap','wrap').style('gap','4px').style('padding','4px 12px')
     .style('background','var(--bg-secondary)').style('border-bottom','1px solid var(--border)')
-    .style('align-items','center').style('overflow-x','auto');
+    .style('align-items','center').style('overflow-x','auto').style('flex-shrink','0');
 
-  // Search input
   const searchInput = filterBar.append('input')
     .attr('type','text').attr('placeholder','Search queries...')
     .style('background','var(--bg-primary)').style('border','1px solid var(--border)')
@@ -1315,7 +1311,6 @@ function renderSGOverview(data, viewport, w, h) {
     .property('value', sgState.queryFilter)
     .on('input', function() { sgState.queryFilter = this.value; renderSGView(viewport); });
 
-  // Topic chips
   filterBar.append('span').text('Topics:').style('color','var(--text-muted)').style('font-size','11px').style('margin-left','8px').style('margin-right','2px');
   const allChip = filterBar.append('span').attr('class','filter-tag' + (sgState.topicFilter ? '' : ' active'))
     .text('All').on('click', () => { sgState.topicFilter = ''; renderSGView(viewport); });
@@ -1323,13 +1318,15 @@ function renderSGOverview(data, viewport, w, h) {
     filterBar.append('span').attr('class','filter-tag' + (sgState.topicFilter === t ? ' active' : ''))
       .text(t).on('click', () => { sgState.topicFilter = sgState.topicFilter === t ? '' : t; renderSGView(viewport); });
   }
-
-  // Count badge
   filterBar.append('span').style('margin-left','auto').style('color','var(--text-dim)').style('font-size','10px')
     .text(activeCount + ' shown');
 
-  // ── Overview graph ──
-  const svg = d3.select(viewport).append('svg').attr('width', w).attr('height', graphH).style('display', 'block');
+  // ── Graph + Panel flex container ──
+  const bodyContainer = d3.select(viewport).append('div')
+    .style('display','flex').style('flex-direction','column').style('flex','1').style('overflow','hidden');
+
+  const graphH = Math.floor(h * 0.45);
+  const svg = bodyContainer.append('svg').attr('width', w).attr('height', graphH).style('display', 'block').style('flex-shrink','0');
   const g = svg.append('g');
   const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', (ev) => g.attr('transform', ev.transform));
   svg.call(zoom);
@@ -1394,8 +1391,8 @@ function renderSGOverview(data, viewport, w, h) {
   });
 
   // ── Grouped message panel ──
-  const panel = d3.select(viewport).append('div').attr('class', 'subgraph-panel')
-    .style('height', panelH + 'px').style('overflow-y', 'auto');
+  const panel = bodyContainer.append('div').attr('class', 'subgraph-panel')
+    .style('flex', '1').style('overflow-y', 'auto');
 
   panel.append('div').attr('class', 'sg-header').html(`
     <strong>${esc(conv.title||'Conversation')}</strong>
@@ -1494,8 +1491,12 @@ function renderSGIntent(data, viewport, w, h) {
   intentFilterBar.append('span').style('margin-left','auto').style('color','var(--text-dim)').style('font-size','10px')
     .text(msgs.length + ' shown');
 
-  // ── Intent-focused graph ──
-  const svg = d3.select(viewport).append('svg').attr('width', w).attr('height', graphH).style('display', 'block');
+  // ── Graph + Panel flex container ──
+  const bodyContainer = d3.select(viewport).append('div')
+    .style('display','flex').style('flex-direction','column').style('flex','1').style('overflow','hidden');
+
+  const graphH = Math.floor(h * 0.5);
+  const svg = bodyContainer.append('svg').attr('width', w).attr('height', graphH).style('display', 'block').style('flex-shrink','0');
   const g = svg.append('g');
   const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', (ev) => g.attr('transform', ev.transform));
   svg.call(zoom);
@@ -1558,8 +1559,8 @@ function renderSGIntent(data, viewport, w, h) {
   });
 
   // ── Message detail panel below graph ──
-  const panel = d3.select(viewport).append('div').attr('class', 'subgraph-panel')
-    .style('height', panelH + 'px').style('overflow-y', 'auto');
+  const panel = bodyContainer.append('div').attr('class', 'subgraph-panel')
+    .style('flex', '1').style('overflow-y', 'auto');
 
   for (const msg of msgs) {
     const card = panel.append('div').attr('class', 'sg-msg-card')
@@ -1689,7 +1690,7 @@ function renderSGSubIntents(data, viewport, w, h) {
   });
 
   const panel = d3.select(viewport).append('div').attr('class', 'subgraph-panel')
-    .style('height', panelH + 'px').style('overflow-y', 'auto');
+    .style('flex', '1').style('overflow-y', 'auto');
 
   for (const [subKey, msgs] of Object.entries(subGroups)) {
     const subDiv = panel.append('div').attr('class', 'sg-group');
