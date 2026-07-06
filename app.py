@@ -250,9 +250,9 @@ def build_knowledge_graph(convs: list[dict]) -> dict:
         hg.nodes.append(Node(
             id=nid,
             type=NodeType.PAPER,
-            label=c["title"][:60],
-            published=str(c.get("timestamp", "")),
-            abstract=c.get("summary", "")[:300],
+            label=(c["title"] or "")[:60],
+            published=str(c.get("timestamp") or ""),
+            abstract=((c.get("summary") or "")[:300]),
         ))
 
     topic_node_ids = {}
