@@ -1246,8 +1246,8 @@ function renderSGView(viewport) {
   const vpHeight = viewport.clientHeight || 600;
   const vpWidth = viewport.clientWidth || 800;
 
-  // Timeline mode overrides all drill-down levels
-  if (sgState.viewMode === 'timeline' && sgState.view !== 'overview') {
+  // Timeline mode: always shows full chronological view regardless of drill level
+  if (sgState.viewMode === 'timeline') {
     renderSGTimeline(data, viewport, vpWidth, vpHeight);
     return;
   }
@@ -1716,134 +1716,160 @@ let _selectedTimelineNode = null;
 function renderSGTimeline(data, viewport, w, h) {
   const conv = data.conversation || {};
   const groups = data.message_groups || {};
-  const panelH = 180; // bottom detail panel height
-  const graphH = h - panelH;
-  const detailPanel = document.getElementById('tl-detail-panel') || createTLDetailPanel(viewport);
+  // Remove any existing detail panel from a previous render
+  viewport.querySelector('#tl-detail-panel')?.remove();
 
-  // Collect all messages in chronological order, grouped by intent
-  const timeline = [];
+  // Build a flat list of all messages with their intent group
+  var timeline = [];
   for (const [intent, g] of Object.entries(groups)) {
-    const msgs = g.queries || g || [];
+    var msgs = g.queries || g || [];
     if (msgs.length > 0) {
       timeline.push({label: intent, msgs: msgs, color: intentColor(intent)});
     }
   }
 
-  // ── SVG graph ──
-  const svg = d3.select(viewport).append('svg')
-    .attr('width', w).attr('height', graphH).style('display', 'block');
-  const mainG = svg.append('g');
+  // Compute total content height
+  var totalMsgs = 0;
+  for (const t of timeline) totalMsgs += t.msgs.length;
+  var contentH = Math.max(h, 60 + totalMsgs * 36 + timeline.length * 40);
+  var graphH = Math.floor(h * 0.65);
+  var panelH = h - graphH - 4;
 
-  const zoom = d3.zoom().scaleExtent([0.3, 3]).on('zoom', (ev) => mainG.attr('transform', ev.transform));
+  // ── Scrollable SVG container ──
+  var scrollDiv = d3.select(viewport).append('div')
+    .style('overflow-y', 'auto').style('height', graphH + 'px')
+    .style('background', 'var(--bg-primary)');
+
+  var svg = scrollDiv.append('svg')
+    .attr('width', w).attr('height', contentH).style('display', 'block');
+  var mainG = svg.append('g');
+
+  var zoom = d3.zoom().scaleExtent([0.3, 3]).on('zoom', (ev) => mainG.attr('transform', ev.transform));
   svg.call(zoom);
 
-  // Build nodes: one per query-answer pair
+  // ── Build node layout ──
   var allNodes = [];
   var allLinks = [];
-  var yOffset = 40;
-  var rowH = 60;
+  var yPos = 20;
+  var maxX = w - 40;
+  var leftMargin = 160;
 
   for (const group of timeline) {
-    // Group label row
-    const labelNode = {id: `label_${group.label}`, label: group.label, type: 'intent', y: yOffset, x: 20,
-      _isLabel: true, _color: group.color, _intent: group.label};
-    allNodes.push(labelNode);
-    yOffset += 24;
+    // Group label
+    var labelId = 'lbl_' + group.label.replace(/[^a-z0-9]/gi, '_');
+    allNodes.push({id: labelId, label: group.label, type: 'intent', y: yPos, x: 12,
+      _isLabel: true, _color: group.color});
+    yPos += 22;
 
-    for (let i = 0; i < group.msgs.length; i++) {
-      const msg = group.msgs[i];
-      const nodeId = `tl_${msg.index}`;
-      const node = {
-        id: nodeId, label: truncate(msg.content, 40), type: 'query',
-        y: yOffset, x: 80 + (i % 8) * 100,
-        _msg: msg, _intent: group.label, _color: group.color, _index: msg.index,
-        _topics: msg.topics || [], _answer: truncate(msg.answer || '', 60),
-      };
-      allNodes.push(node);
+    // Messages in this group
+    var col = 0;
+    var maxCol = Math.max(1, Math.floor((maxX - leftMargin) / 180));
+    for (var i = 0; i < group.msgs.length && i < 500; i++) {
+      var msg = group.msgs[i];
+      var nid = 'tn_' + msg.index;
+      var nx = leftMargin + (col % maxCol) * 180;
+      var ny = yPos;
 
-      // Edge from group label to first msg
-      if (i === 0) allLinks.push({source: labelNode.id, target: nodeId});
-
-      // Edge from previous msg in same group
-      if (i > 0) allLinks.push({source: `tl_${group.msgs[i-1].index}`, target: nodeId});
-
-      yOffset += rowH;
-    }
-    yOffset += 20;
-  }
-
-  // Layered layout: compute x positions to avoid overlap
-  var cols = [];
-  for (const n of allNodes) {
-    if (n._isLabel) continue;
-    const col = Math.floor((n.y - 40) / rowH) % 8;
-    n.x = 80 + col * 110;
-    n._col = col;
-  }
-
-  // Render links as curves
-  const linkG = mainG.append('g');
-  for (const l of allLinks) {
-    const src = allNodes.find(n => n.id === l.source);
-    const tgt = allNodes.find(n => n.id === l.target);
-    if (src && tgt) {
-      linkG.append('path')
-        .attr('d', `M${src.x},${src.y} C${(src.x+tgt.x)/2},${src.y} ${(src.x+tgt.x)/2},${tgt.y} ${tgt.x},${tgt.y}`)
-        .attr('stroke', tgt._color || '#30363d').attr('stroke-width', 1.5)
-        .attr('fill', 'none').attr('stroke-opacity', 0.4);
-    }
-  }
-
-  // Render group labels
-  const labelG = mainG.append('g');
-  for (const n of allNodes) {
-    if (!n._isLabel) continue;
-    labelG.append('rect')
-      .attr('x', 10).attr('y', n.y - 10).attr('width', 10).attr('height', 10)
-      .attr('rx', 2).attr('fill', n._color);
-    labelG.append('text')
-      .attr('x', 26).attr('y', n.y + 2).attr('font-size', '11px')
-      .attr('fill', n._color).attr('font-weight', '600')
-      .text(n.label);
-  }
-
-  // Render message nodes
-  const nodeG = mainG.append('g');
-  for (const n of allNodes) {
-    if (n._isLabel) continue;
-    const g = nodeG.append('g').attr('class', 'tl-node')
-      .style('cursor', 'pointer')
-      .on('click', () => showTLDetail(n, detailPanel, conv))
-      .on('mouseenter', function() {
-        d3.select(this).select('rect').attr('stroke', '#fff').attr('stroke-width', 2);
-      })
-      .on('mouseleave', function() {
-        d3.select(this).select('rect').attr('stroke', n._color).attr('stroke-width', 1.5);
+      allNodes.push({
+        id: nid, label: truncate(msg.content, 32), type: 'query',
+        x: nx, y: ny, _msg: msg, _intent: group.label, _color: group.color,
+        _index: msg.index, _topics: msg.topics || [],
+        _answer: truncate(msg.answer || '', 50),
       });
 
-    g.append('rect')
-      .attr('x', n.x - 6).attr('y', n.y - 8)
-      .attr('width', 12).attr('height', 16).attr('rx', 3)
-      .attr('fill', n._color).attr('stroke', n._color).attr('stroke-width', 1.5);
+      if (i === 0) allLinks.push({source: labelId, target: nid});
+      if (i > 0) allLinks.push({source: 'tn_' + group.msgs[i-1].index, target: nid});
 
-    g.append('text')
-      .attr('x', n.x + 14).attr('y', n.y + 4)
-      .attr('font-size', '11px').attr('fill', 'var(--text-secondary)')
-      .text(n.label);
+      col++;
+      if (col >= maxCol) { col = 0; yPos += 50; }
+    }
+    yPos = Math.max(yPos + 10, allNodes.filter(n => !n._isLabel).reduce((m, n) => Math.max(m, n.y + 30), yPos));
+  }
 
-    // Topic badges
-    if (n._topics.length > 0) {
-      g.append('text')
-        .attr('x', n.x + 14).attr('y', n.y + 18)
-        .attr('font-size', '9px').attr('fill', 'var(--text-dim)')
-        .text(n._topics.slice(0, 2).join(', '));
+  // ── Render ──
+  // Links
+  var linkG = mainG.append('g');
+  for (const l of allLinks) {
+    var src = allNodes.find(function(n) { return n.id === l.source; });
+    var tgt = allNodes.find(function(n) { return n.id === l.target; });
+    if (src && tgt) {
+      linkG.append('path')
+        .attr('d', 'M' + src.x + ',' + src.y + ' C' + ((src.x+tgt.x)/2) + ',' + src.y + ' ' + ((src.x+tgt.x)/2) + ',' + tgt.y + ' ' + tgt.x + ',' + tgt.y)
+        .attr('stroke', tgt._color || 'var(--border)').attr('stroke-width', 1.2)
+        .attr('fill', 'none').attr('stroke-opacity', 0.35);
     }
   }
 
-  // Center view
-  const maxY = allNodes.length > 0 ? Math.max(...allNodes.map(n => n.y)) : graphH;
-  const centerY = maxY / 2;
-  mainG.attr('transform', `translate(0, ${Math.max(0, graphH/2 - centerY)})`);
+  // Group labels
+  var labelG = mainG.append('g');
+  for (const n of allNodes) {
+    if (!n._isLabel) continue;
+    labelG.append('rect').attr('x', 10).attr('y', n.y - 8).attr('width', 8).attr('height', 8).attr('rx', 2).attr('fill', n._color);
+    labelG.append('text').attr('x', 24).attr('y', n.y + 1).attr('font-size', '10px').attr('fill', n._color).attr('font-weight', '600').text(n.label);
+  }
+
+  // Message nodes
+  var nodeG = mainG.append('g');
+  for (const n of allNodes) {
+    if (n._isLabel) continue;
+    var gg = nodeG.append('g').attr('class', 'tl-node').style('cursor', 'pointer');
+    gg.append('rect').attr('x', n.x - 4).attr('y', n.y - 7).attr('width', 8).attr('height', 14).attr('rx', 2)
+      .attr('fill', n._color).attr('stroke', n._color).attr('stroke-width', 1);
+    gg.append('text').attr('x', n.x + 10).attr('y', n.y + 3).attr('font-size', '10px').attr('fill', 'var(--text-secondary)').text(n.label);
+    if (n._topics.length > 0) {
+      gg.append('text').attr('x', n.x + 10).attr('y', n.y + 16).attr('font-size', '8px').attr('fill', 'var(--text-dim)')
+        .text(n._topics.slice(0, 2).join(' '));
+    }
+    gg.on('click', function(m) { return function() { showTLDetail(m, viewport, conv, w, panelH); }; }(n));
+    gg.on('mouseenter', function() { d3.select(this).select('rect').attr('stroke', '#fff').attr('stroke-width', 2); });
+    gg.on('mouseleave', function() { d3.select(this).select('rect').attr('stroke', d3.select(this).datum()?._color || n._color).attr('stroke-width', 1); });
+  }
+}
+
+function showTLDetail(node, viewport, conv, w, panelH) {
+  // Remove existing detail panel
+  viewport.querySelector('#tl-detail-panel')?.remove();
+
+  var panel = d3.select(viewport).append('div').attr('id', 'tl-detail-panel')
+    .style('height', panelH + 'px').style('overflow-y', 'auto')
+    .style('background', 'var(--bg-secondary)').style('border-top', '1px solid var(--border)')
+    .style('padding', '8px 16px');
+
+  var msg = node._msg;
+  var topics = (node._topics||[]).join(', ') || '\u2014';
+
+  panel.html([
+    '<div style="display:flex;gap:8px;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;">',
+      '<span class="filter-tag active" style="font-size:11px;background:' + node._color + '22;color:' + node._color + ';border-color:' + node._color + '" onclick="showTLTab(this,\'concept\')">Concept</span>',
+      '<span class="filter-tag" style="font-size:11px" onclick="showTLTab(this,\'intent\')">Intent</span>',
+      '<span class="filter-tag" style="font-size:11px" onclick="showTLTab(this,\'topic\')">Topic</span>',
+    '</div>',
+    '<div id="tl-tab-content">',
+      '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px;"><b>Query:</b> ' + esc(msg.content||'') + '</div>',
+      '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;"><b>Answer:</b> ' + esc(node._answer||'\u2014') + '</div>',
+      '<div style="font-size:11px;color:var(--text-dim);margin-top:4px;"><b>Concepts:</b> ' + topics + '</div>',
+    '</div>',
+    '<div id="tl-tab-intent" style="display:none;font-size:12px;color:var(--text-secondary);">',
+      '<div><b>Intent:</b> ' + esc(node._intent||'\u2014') + '</div>',
+      '<div style="margin-top:4px;font-size:11px;color:var(--text-muted);"><b>Conversation:</b> ' + esc(conv.title||'') + '</div>',
+    '</div>',
+    '<div id="tl-tab-topic" style="display:none;font-size:12px;color:var(--text-secondary);">',
+      '<div><b>Topics:</b> ' + topics + '</div>',
+      '<div style="margin-top:4px;font-size:11px;color:var(--text-dim);"><b>Model:</b> ' + (msg.model||'\u2014') + '</div>',
+    '</div>',
+  ].join('\n'));
+  _selectedTimelineNode = node;
+}
+
+function showTLTab(el, tab) {
+  el.parentElement.querySelectorAll('.filter-tag').forEach(function(t) { t.classList.remove('active'); });
+  el.classList.add('active');
+  var c = document.getElementById('tl-tab-content');
+  var i = document.getElementById('tl-tab-intent');
+  var t = document.getElementById('tl-tab-topic');
+  if (c) c.style.display = tab === 'concept' ? '' : 'none';
+  if (i) i.style.display = tab === 'intent' ? '' : 'none';
+  if (t) t.style.display = tab === 'topic' ? '' : 'none';
 }
 
 function createTLDetailPanel(viewport) {
