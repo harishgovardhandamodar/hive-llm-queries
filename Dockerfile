@@ -18,4 +18,7 @@ ENV OLLAMA_MODEL=llama3.2:3b
 ENV EMBED_URL=http://host.docker.internal:11434/api/embed
 ENV LABEL_URL=http://host.docker.internal:11434/api/chat
 
-CMD ["python3", "app.py"]
+COPY docker-entrypoint.sh .
+RUN chmod +x docker-entrypoint.sh
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
