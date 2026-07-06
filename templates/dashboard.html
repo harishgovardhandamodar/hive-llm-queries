@@ -760,39 +760,31 @@ let searchTerm = '';
 
 // ── Load data ────────────────────────────────────────────────────────────
 async function loadData() {
-  // Try to fetch graph data; show building status while waiting
-  var attempts = 0;
-  var maxWait = 120; // seconds before giving up
-
-  document.getElementById('loading').innerHTML =
-    '<div style="text-align:center;color:var(--text-muted);padding:40px;">' +
-    '<div class="loading-spinner"></div>' +
-    '<p style="margin-top:16px;font-size:13px;">Building knowledge graph...</p>' +
-    '<p style="margin-top:4px;font-size:11px;color:var(--text-dim);">' +
-    'This may take a moment on first run (extracting via Ollama)</p></div>';
-
-  var poll = setInterval(async function() {
-    attempts++;
+  try {
+    var resp = await fetch('/api/graph');
+    graphData = await resp.json();
+  } catch(e) {
+    console.error('Fetch failed, retrying in 2s:', e);
+    await new Promise(r => setTimeout(r, 2000));
     try {
-      var resp = await fetch('/api/graph');
-      var d = await resp.json();
-      if (d && d.nodes && d.nodes.length > 0) {
-        clearInterval(poll);
-        graphData = d;
-        document.getElementById('loading').style.display = 'none';
-        render();
-        return;
-      }
-    } catch(e) {}
-    if (attempts >= maxWait) {
-      clearInterval(poll);
+      var resp2 = await fetch('/api/graph');
+      graphData = await resp2.json();
+    } catch(e2) {
       document.getElementById('loading').innerHTML =
-        '<div style="text-align:center;color:var(--text-muted);padding:40px;">' +
-        '<p style="font-size:13px;">Still building... <a href="/api/graph" target="_blank">check status</a></p>' +
-        '<button onclick="location.reload()" style="margin-top:12px;padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;">Refresh</button>' +
-        '</div>';
+        '<div style="text-align:center;color:var(--red);padding:40px;">' +
+        '<p style="font-size:13px;">Failed to connect</p>' +
+        '<button onclick="location.reload()" style="margin-top:12px;padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;">Retry</button></div>';
+      return;
     }
-  }, 1000);
+  }
+  document.getElementById('loading').style.display = 'none';
+  if (graphData && graphData.nodes) {
+    render();
+  } else {
+    document.getElementById('loading').innerHTML =
+      '<div style="text-align:center;color:var(--text-muted);padding:40px;">' +
+      '<p>Graph data not ready yet. <button onclick="location.reload()">Refresh</button></p></div>';
+  }
 }
 
 // ── Render ────────────────────────────────────────────────────────────────
@@ -2205,15 +2197,7 @@ function esc(s) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
-loadData().catch(err => {
-  console.error('Dashboard error:', err);
-  document.getElementById('loading').innerHTML =
-    `<div style="color:var(--red);text-align:center;padding:40px;">
-      <h3>Failed to load dashboard</h3>
-      <p style="margin-top:8px;font-size:13px;">${esc(err.message || String(err))}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 20px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;">Retry</button>
-    </div>`;
-});
+loadData();
 </script>
 </body>
 </html>
