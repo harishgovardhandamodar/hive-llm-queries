@@ -775,6 +775,11 @@ if __name__ == "__main__":
             print(f"  Nodes: {len(data.get('nodes', []))}")
             print(f"  Edges: {len(data.get('links', []))}")
             print("  Background build complete")
+        except Exception as e:
+            print(f"  Background build error: {e}")
+            import traceback
+            traceback.print_exc()
+            _graph_data = {"error": str(e), "nodes": [], "links": [], "conversations": [], "stats": {}}
         finally:
             _build_in_progress = False
 
