@@ -1156,7 +1156,7 @@ a:hover { text-decoration: underline; }
       <div class="stat-card"><div class="value" id="stat-convs">-</div><div class="label">Conversations</div></div>
       <div class="stat-card"><div class="value" id="stat-topics">-</div><div class="label">Topics</div></div>
       <div class="stat-card"><div class="value" id="stat-concepts">-</div><div class="label">Concepts</div></div>
-      <div class="stat-card"><div class="value" id="stat-models">-</div><div class="label">Models</div></div>
+      <div class="stat-card"><div class="value" id="stat-clusters">-</div><div class="label">Clusters</div></div>
     </div>
 
     <div class="search-box">
@@ -1332,7 +1332,8 @@ function renderStats() {
   document.getElementById('stat-convs').textContent = s.conversations ?? 0;
   document.getElementById('stat-topics').textContent = s.topics ?? 0;
   document.getElementById('stat-concepts').textContent = s.concepts ?? 0;
-  document.getElementById('stat-models').textContent = (s.models || []).length;
+  var el = document.getElementById('stat-clusters');
+  if (el) el.textContent = (clusterData && clusterData.clusters) ? clusterData.clusters.length : 0;
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────
@@ -2767,9 +2768,11 @@ function clusterColor(i) { return CLUSTER_COLORS[i % CLUSTER_COLORS.length]; }
 function loadClusters() {
   fetch('/api/clusters').then(function(r) { return r.json(); }).then(function(d) {
     clusterData = d;
+    renderStats();
     renderClustersView();
   }).catch(function() {
     clusterData = { clusters: [], metadata: {} };
+    renderStats();
     renderClustersView();
   });
 }
