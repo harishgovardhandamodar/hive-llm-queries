@@ -191,9 +191,10 @@ a:hover { text-decoration: underline; }
   cursor: pointer;
   border-bottom: 1px solid var(--bg-tertiary);
   transition: background 0.15s;
+  border-left: 3px solid transparent;
 }
 .conv-item:hover { background: var(--hover-bg); }
-.conv-item.active { background: var(--btn-primary)22; border-left: 3px solid var(--btn-primary); }
+.conv-item.active { background: var(--accent-bg); border-left-color: var(--accent); }
 .conv-item h4 {
   font-size: 13px;
   font-weight: 600;
@@ -1171,10 +1172,10 @@ a:hover { text-decoration: underline; }
     <div class="filters" id="topic-filters">
       <h3>Topic</h3>
       <div class="filter-tags collapsible" id="topic-tags" style="max-height:130px;overflow:hidden;transition:max-height 0.25s ease;"></div>
-      <div class="filter-expand" id="topic-expand" style="font-size:11px;color:var(--accent);cursor:pointer;padding:4px 0 0 4px;" onclick="toggleTopicExpand()">Show all</div>
+      <div class="filter-expand" id="topic-expand" style="font-size:11px;color:var(--accent);cursor:pointer;padding:4px 0 0 16px;" onclick="toggleTopicExpand()">Show all</div>
     </div>
 
-    <div class="filters" style="border-bottom:none;padding-top:4px;">
+    <div class="filters" id="analysis-model-filters">
       <h3>Analysis Model</h3>
       <div style="display:flex;gap:4px;margin-top:4px;" id="analysis-model-selector"></div>
     </div>
@@ -2987,10 +2988,11 @@ function renderClusterExpanded(viewport) {
     '<span class="cluster-color-dot" style="background:' + col + ';width:12px;height:12px;"></span>' +
     '<span class="cluster-expanded-label">' + esc(cl.label) + '</span>' +
     '<span class="cluster-expanded-meta">' + cl.size + ' Q&A pairs from ' + cl.conversation_count + ' conversations</span>' +
-    '<button class="cluster-kg-btn" id="cluster-kg-toggle" onclick="toggleClusterKG(\'' + cl.id + '\')">\u2699 Knowledge Graph</button>' +
-    '<button class="cluster-kg-btn" id="cluster-hive-toggle" onclick="toggleClusterKGMode()" style="margin-left:4px;display:none">\u2B21 Hive</button>' +
-    '<button class="cluster-kg-btn" id="cluster-summary-toggle" onclick="toggleClusterSummary(\'' + cl.id + '\')" style="margin-left:4px">\u2139 Summary</button>' +
-    '<button class="cluster-kg-btn" id="cluster-pairs-toggle" onclick="toggleClusterPairs()" style="margin-left:4px">Q&amp;A \u25B2</button>';
+    '<span style="flex:1"></span>' +
+    '<button class="cluster-kg-btn" id="cluster-kg-toggle" onclick="toggleClusterKG(\'' + cl.id + '\')">\u2699 KG</button>' +
+    '<button class="cluster-kg-btn" id="cluster-hive-toggle" onclick="toggleClusterKGMode()" style="display:none">\u2B21 Hive</button>' +
+    '<button class="cluster-kg-btn" id="cluster-summary-toggle" onclick="toggleClusterSummary(\'' + cl.id + '\')">\u2139 Summary</button>' +
+    '<button class="cluster-kg-btn" id="cluster-pairs-toggle" onclick="toggleClusterPairs()">Q&amp;A \u25B2</button>';
   viewport.appendChild(header);
 
   var contentRow = document.createElement('div');
