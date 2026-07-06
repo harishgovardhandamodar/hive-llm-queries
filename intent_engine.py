@@ -15,6 +15,7 @@ import json
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -25,10 +26,11 @@ import requests
 CACHE_DIR = Path(__file__).parent / ".intent_cache"
 EMBED_URL = os.environ.get("EMBED_URL", "http://localhost:11434/api/embed")
 LABEL_URL = os.environ.get("LABEL_URL", "http://localhost:11434/api/chat")
+LABEL_MODEL = os.environ.get("LABEL_MODEL", "llama3.2:3b")
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "nomic-embed-text")
 CLUSTER_SIM = float(os.environ.get("CLUSTER_SIM", "0.55"))
 MIN_CLUSTER_PCT = float(os.environ.get("MIN_CLUSTER_PCT", "0.005"))
-MAX_QUERIES = int(os.environ.get("MAX_INTENT_QUERIES", "1000"))
+MAX_QUERIES = int(os.environ.get("MAX_INTENT_QUERIES", "500"))
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -78,42 +80,47 @@ class EmbeddingCache:
 
 # ── Embedding (batched) ────────────────────────────────────────────────────
 
+def _fetch_batch(batch: list[tuple[int, str]]) -> list[tuple[int, list[float], str]]:
+    """Fetch embeddings for a batch with timeout."""
+    texts_batch = [t for _, t in batch]
+    try:
+        resp = requests.post(EMBED_URL, json={"model": EMBED_MODEL, "input": texts_batch}, timeout=15)
+        vectors = resp.json().get("embeddings", [])
+    except Exception:
+        vectors = [[0.0] * 768 for _ in texts_batch]
+    return [(idx, vec, raw) for (idx, raw), vec in zip(batch, vectors)]
+
+
 def get_embeddings(texts: list[str], cache: EmbeddingCache | None = None) -> list[list[float]]:
-    """Get embeddings, using cache when available and batching uncached texts."""
+    """Get embeddings, using cache when available and batching uncached texts in parallel."""
     if not texts:
         return []
 
     texts = [t[:8000] for t in texts]
     result: list[list[float]] = []
 
-    # Gather cache hits / misses
     to_fetch: list[tuple[int, str]] = []
     for i, t in enumerate(texts):
         cached = cache.get(t) if cache else None
         if cached is not None:
             result.append(cached)
         else:
-            result.append([])  # placeholder
+            result.append([])
             to_fetch.append((i, t))
 
     if not to_fetch:
         return result
 
-    # Batch-fetch uncached
+    # Parallel batches
     batch_size = 50
-    for start in range(0, len(to_fetch), batch_size):
-        batch = to_fetch[start:start + batch_size]
-        texts_batch = [t for _, t in batch]
-        try:
-            resp = requests.post(EMBED_URL, json={"model": EMBED_MODEL, "input": texts_batch}, timeout=60)
-            vectors = resp.json().get("embeddings", [])
-        except Exception:
-            vectors = [[0.0] * 768 for _ in texts_batch]
-
-        for (idx, raw_text), vec in zip(batch, vectors):
-            result[idx] = vec
-            if cache and vec:
-                cache.put(raw_text, vec)
+    batches = [to_fetch[i:i + batch_size] for i in range(0, len(to_fetch), batch_size)]
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        futures = [ex.submit(_fetch_batch, b) for b in batches]
+        for f in as_completed(futures):
+            for idx, vec, raw_text in f.result():
+                result[idx] = vec
+                if cache and vec:
+                    cache.put(raw_text, vec)
 
     if cache:
         cache.flush()
@@ -205,8 +212,9 @@ def cluster_embeddings(embeds: list[list[float]]) -> list[list[int]]:
 # ── LLM Labeling ───────────────────────────────────────────────────────────
 
 def label_clusters(clusters: list[list[int]], queries: list[dict],
-                   conv_title: str, model: str) -> dict[int, str]:
-    """Batch-label all clusters via the selected LLM.  Returns {cluster_idx: label}."""
+                   conv_title: str, model: str = "") -> dict[int, str]:
+    """Batch-label all clusters via the labeling LLM.  Returns {cluster_idx: label}."""
+    model = model or LABEL_MODEL
     if not clusters:
         return {}
 
@@ -246,9 +254,9 @@ def label_clusters(clusters: list[list[int]], queries: list[dict],
                 "model": model,
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
-                "options": {"num_predict": 300, "temperature": 0.2},
+                "options": {"num_predict": 200, "temperature": 0.2},
             },
-            timeout=120,
+            timeout=30,
         )
         raw = (resp.json().get("message", {}) or {}).get("content", "")
         raw = re.sub(r"^[^{]*", "", raw).strip()
@@ -291,8 +299,8 @@ def discover_intents(queries: list[dict], conv_id: str = "",
     # Cluster
     cluster_indices = cluster_embeddings(embeds)
 
-    # Label
-    label_map = label_clusters(cluster_indices, queries, conv_title, model)
+    # Label (always uses fast model for speed)
+    label_map = label_clusters(cluster_indices, queries, conv_title)
 
     # Build result
     result: dict[str, list[dict]] = {}
@@ -329,7 +337,7 @@ def discover_intents(queries: list[dict], conv_id: str = "",
 
 def discover_intents_deep(queries: list[dict], conv_id: str = "",
                           conv_title: str = "", model: str = "llama3.2:3b",
-                          max_sub_cluster: int = 30
+                          max_sub_cluster: int = 40
                           ) -> dict[str, dict | list]:
     """Like discover_intents but sub-clusters groups larger than max_sub_cluster.
 
@@ -439,12 +447,12 @@ def cross_cluster_intents(per_conv_groups: dict[str, dict[str, list[dict]]],
         resp = requests.post(
             LABEL_URL,
             json={
-                "model": model,
+                "model": LABEL_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
-                "options": {"num_predict": 300, "temperature": 0.2},
+                "options": {"num_predict": 200, "temperature": 0.2},
             },
-            timeout=120,
+            timeout=30,
         )
         raw = (resp.json().get("message", {}) or {}).get("content", "")
         raw = re.sub(r"^[^{]*", "", raw).strip()
