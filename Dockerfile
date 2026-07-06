@@ -13,6 +13,7 @@ RUN mkdir -p chatHistory .intent_cache .knowledge_store
 EXPOSE 5001
 
 ENV PYTHONUNBUFFERED=1
+ENV FLASK_DEBUG=0
 ENV FLASK_RUN_HOST=0.0.0.0
 ENV OLLAMA_URL=http://host.docker.internal:11434/api/generate
 ENV OLLAMA_MODEL=llama3.2:3b

@@ -789,4 +789,6 @@ if __name__ == "__main__":
     print("Starting dashboard at http://127.0.0.1:5001")
     print("  Graph is building in background — check back in a moment")
     webbrowser.open("http://127.0.0.1:5001")
-    app.run(debug=True, port=5001, use_reloader=False)
+    debug_mode = os.environ.get("FLASK_DEBUG", "0").lower() in ("1", "true", "yes")
+    host = os.environ.get("FLASK_RUN_HOST", "0.0.0.0")
+    app.run(host=host, debug=debug_mode, port=5001, use_reloader=False)
