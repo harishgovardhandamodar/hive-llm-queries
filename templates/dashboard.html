@@ -237,8 +237,20 @@ a:hover { text-decoration: underline; }
 .graph-container {
   flex: 1;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-.graph-container svg { width: 100%; height: 100%; }
+.graph-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.graph-viewport > svg { flex-shrink: 0; }
+.graph-viewport > .subgraph-panel { flex-shrink: 0; }
+.graph-viewport svg { width: 100%; height: 100%; display: block; }
 
 /* Tooltip */
 .tooltip {
@@ -398,7 +410,122 @@ a:hover { text-decoration: underline; }
 .node-concept { fill: var(--yellow); }
 .node-intent { fill: var(--red); }
 .node-model { fill: var(--purple); }
+.node-query { fill: #f0883e; }
+.node-answer { fill: #79c0ff; }
+.node-summary { fill: var(--text-muted); }
+.node-tag { fill: var(--text-dim); }
 
+/* Graph tab bar */
+.graph-area { display: flex; flex-direction: column; flex: 1; overflow: hidden; position: relative; }
+.tab-bar {
+  display: flex;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+  padding: 0 8px;
+  min-height: 36px;
+  align-items: flex-end;
+}
+.tab-bar::-webkit-scrollbar { height: 2px; }
+.tab-bar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 1px; }
+.graph-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  white-space: nowrap;
+  transition: all 0.15s;
+  user-select: none;
+  margin-right: 2px;
+}
+.graph-tab:hover { color: var(--text-secondary); background: var(--hover-bg); }
+.graph-tab.active {
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border-color: var(--border);
+}
+.graph-tab .tab-close {
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+.graph-tab .tab-close:hover { opacity: 1; }
+
+/* Subgraph message panel */
+.subgraph-panel {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.sg-header {
+  padding: 6px 0 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.sg-group { margin-bottom: 12px; }
+.sg-group-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sg-intent-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.sg-msg-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.sg-msg-card:hover { border-color: var(--accent); }
+.sg-msg-query { color: var(--text-secondary); font-size: 12px; }
+.sg-msg-answer {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.sg-msg-meta {
+  display: flex;
+  gap: 4px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.sg-topic-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 9px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
 /* Modal */
 .modal-overlay {
   position: fixed; inset: 0;
@@ -544,17 +671,24 @@ a:hover { text-decoration: underline; }
 
   <!-- Main -->
   <main class="main">
-    <div class="graph-container" id="graph-container">
-      <div class="loading" id="loading"><div class="loading-spinner"></div></div>
-      <svg id="graph-svg"></svg>
-      <div class="legend" id="legend">
-        <div class="legend-item"><span class="legend-dot node-conversation"></span>Conversation</div>
-        <div class="legend-item"><span class="legend-dot node-topic"></span>Topic</div>
-        <div class="legend-item"><span class="legend-dot node-concept"></span>Concept</div>
-        <div class="legend-item"><span class="legend-dot node-intent"></span>Intent</div>
-        <div class="legend-item"><span class="legend-dot node-model"></span>Model</div>
+    <div class="graph-area" id="graph-area">
+      <div class="tab-bar" id="tab-bar"></div>
+      <div class="graph-container" id="graph-container">
+        <div class="loading" id="loading"><div class="loading-spinner"></div></div>
+        <div class="graph-viewport" id="graph-viewport">
+          <svg id="graph-svg"></svg>
+        </div>
+        <div class="legend" id="legend">
+          <div class="legend-item"><span class="legend-dot node-conversation"></span>Conversation</div>
+          <div class="legend-item"><span class="legend-dot node-topic"></span>Topic</div>
+          <div class="legend-item"><span class="legend-dot node-concept"></span>Concept</div>
+          <div class="legend-item"><span class="legend-dot node-intent"></span>Intent</div>
+          <div class="legend-item"><span class="legend-dot node-model"></span>Model</div>
+          <div class="legend-item"><span class="legend-dot node-query"></span>Query</div>
+          <div class="legend-item"><span class="legend-dot node-answer"></span>Answer</div>
+        </div>
+        <div class="controls-hint">Scroll to zoom · Drag to pan · Drag nodes</div>
       </div>
-      <div class="controls-hint">Scroll to zoom · Drag to pan · Drag nodes</div>
     </div>
 
     <!-- Detail Panel -->
@@ -620,7 +754,7 @@ function render() {
   renderStats();
   renderFilters();
   renderConvList();
-  renderGraph();
+  initTabs();
 }
 
 function renderStats() {
@@ -702,7 +836,7 @@ function renderConvList() {
       </div>
       <div class="conv-summary">${esc(c.summary||'')}</div>
     `;
-    item.onclick = () => selectConversation(c.id);
+    item.onclick = () => { openConversationTab(c.id); selectConversation(c.id); };
     list.appendChild(item);
   }
 }
@@ -727,131 +861,198 @@ function getFilteredConvs() {
   return convs;
 }
 
-// ── Graph ─────────────────────────────────────────────────────────────────
-function renderGraph() {
-  const container = document.getElementById('graph-container');
-  const width = container.clientWidth;
-  const height = container.clientHeight;
+// ── Graph Tabs ────────────────────────────────────────────────────────────
+const tabs = [];
+let activeTabId = 'overview';
+let simulations = {};
 
+function initTabs() {
+  tabs.length = 0;
+  const overview = { id: 'overview', label: 'Overview', type: 'overview', data: null };
+  tabs.push(overview);
+  renderTabBar();
+  switchTab('overview');
+}
+
+function renderTabBar() {
+  const bar = document.getElementById('tab-bar');
+  bar.innerHTML = '';
+  for (const tab of tabs) {
+    const el = document.createElement('div');
+    el.className = 'graph-tab' + (tab.id === activeTabId ? ' active' : '');
+    el.textContent = tab.label;
+    el.onclick = () => switchTab(tab.id);
+    if (tab.id !== 'overview') {
+      const close = document.createElement('span');
+      close.className = 'tab-close';
+      close.textContent = '\u00d7';
+      close.onclick = (e) => { e.stopPropagation(); closeTab(tab.id); };
+      el.appendChild(close);
+    }
+    bar.appendChild(el);
+  }
+}
+
+function switchTab(tabId) {
+  activeTabId = tabId;
+  renderTabBar();
+  renderActiveGraph();
+}
+
+function closeTab(tabId) {
+  if (tabId === 'overview') return;
+  const idx = tabs.findIndex(t => t.id === tabId);
+  if (idx === -1) return;
+  tabs.splice(idx, 1);
+  if (activeTabId === tabId) {
+    const next = tabs[Math.min(idx, tabs.length - 1)];
+    activeTabId = next ? next.id : 'overview';
+  }
+  delete simulations[tabId];
+  renderTabBar();
+  renderActiveGraph();
+}
+
+async function openConversationTab(convId) {
+  // Check if already open
+  const existing = tabs.find(t => t.id === convId);
+  if (existing) {
+    switchTab(convId);
+    return;
+  }
+
+  // Find the conversation in current data for quick label
+  const conv = (graphData.conversations||[]).find(c => c.id === convId);
+  const label = conv ? (conv.title||'').slice(0, 30) : convId.slice(0, 8);
+
+  const tab = { id: convId, label, type: 'subgraph', data: null, loading: true };
+  tabs.push(tab);
+  activeTabId = convId;
+  renderTabBar();
+  renderActiveGraph();
+
+  try {
+    const resp = await fetch(`/api/conversation-subgraph/${convId}`);
+    const data = await resp.json();
+    tab.data = data;
+    tab.loading = false;
+    if (activeTabId === convId) renderActiveGraph();
+  } catch (e) {
+    tab.loading = false;
+    tab.error = e.message;
+    if (activeTabId === convId) renderActiveGraph();
+  }
+}
+
+function renderActiveGraph() {
   const svg = d3.select('#graph-svg');
   svg.selectAll('*').remove();
-  svg.attr('width', width).attr('height', height);
 
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (!tab) return;
+
+  if (tab.loading) {
+    svg.append('text')
+      .attr('x', '50%').attr('y', '50%')
+      .attr('text-anchor', 'middle').attr('fill', 'var(--text-muted)')
+      .attr('font-size', '14px')
+      .text('Loading subgraph...');
+    return;
+  }
+
+  if (tab.error) {
+    svg.append('text')
+      .attr('x', '50%').attr('y', '50%')
+      .attr('text-anchor', 'middle').attr('fill', 'var(--red)')
+      .attr('font-size', '14px')
+      .text('Error: ' + tab.error);
+    return;
+  }
+
+  if (tab.type === 'overview') {
+    renderOverviewGraph();
+  } else if (tab.type === 'subgraph' && tab.data) {
+    renderSubgraph(tab.data);
+  }
+}
+
+function getGraphDimensions() {
+  const vp = document.getElementById('graph-viewport');
+  return { width: vp.clientWidth || 800, height: vp.clientHeight || 600 };
+}
+
+// ── Overview Graph ─────────────────────────────────────────────────────────
+function renderOverviewGraph() {
+  const { width, height } = getGraphDimensions();
+  const svg = d3.select('#graph-svg').attr('width', width).attr('height', height);
   const g = svg.append('g');
 
-  // Zoom
-  const zoom = d3.zoom()
-    .scaleExtent([0.2, 4])
+  if (!graphData || !graphData.nodes || !graphData.nodes.length) {
+    g.append('text')
+      .attr('x', width/2).attr('y', height/2)
+      .attr('text-anchor', 'middle').attr('fill', 'var(--text-muted)')
+      .attr('font-size', '14px')
+      .text('Building knowledge graph...');
+    return;
+  }
+
+  const zoom = d3.zoom().scaleExtent([0.2, 4])
     .on('zoom', (event) => g.attr('transform', event.transform));
   svg.call(zoom);
 
-  // Build graph from data
   const nodes = graphData.nodes.map(n => ({
-    ...n,
-    nodeType: getNodeType(n),
-    r: getNodeRadius(n),
+    ...n, nodeType: getNodeType(n), r: getNodeRadius(n),
   }));
-  const links = graphData.links.map(l => ({
-    source: l.source,
-    target: l.target,
-    relation: l.relation,
-  }));
+  const links = graphData.links.map(l => ({ source: l.source, target: l.target, relation: l.relation }));
 
-  // Simulation
-  simulation = d3.forceSimulation(nodes)
+  const sim = d3.forceSimulation(nodes)
     .force('link', d3.forceLink(links).id(d => d.id).distance(80))
     .force('charge', d3.forceManyBody().strength(-200))
     .force('center', d3.forceCenter(width / 2, height / 2))
     .force('collision', d3.forceCollide().radius(d => d.r + 8));
+  simulations['overview'] = sim;
 
-  // Links
-  const link = g.append('g')
-    .selectAll('line')
-    .data(links)
-    .join('line')
-    .attr('stroke', 'var(--border)')
-    .attr('stroke-width', 1)
-    .attr('stroke-opacity', 0.4);
+  const link = g.append('g').selectAll('line').data(links).join('line')
+    .attr('stroke', 'var(--border)').attr('stroke-width', 1).attr('stroke-opacity', 0.4);
 
-  // Nodes
-  const node = g.append('g')
-    .selectAll('circle')
-    .data(nodes)
-    .join('circle')
-    .attr('r', d => d.r)
-    .attr('fill', d => getNodeColor(d))
-    .attr('stroke', 'var(--bg-primary)')
-    .attr('stroke-width', 1.5)
+  const node = g.append('g').selectAll('circle').data(nodes).join('circle')
+    .attr('r', d => d.r).attr('fill', d => getNodeColor(d))
+    .attr('stroke', 'var(--bg-primary)').attr('stroke-width', 1.5)
     .attr('opacity', d => isNodeVisible(d) ? 1 : 0.08)
     .style('cursor', 'pointer')
-    .call(d3.drag()
-      .on('start', (event, d) => {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x;
-        d.fy = d.y;
-      })
-      .on('drag', (event, d) => {
-        d.fx = event.x;
-        d.fy = event.y;
-      })
-      .on('end', (event, d) => {
-        if (!event.active) simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
-      })
-    )
-    .on('click', (event, d) => {
-      event.stopPropagation();
+    .call(d3.drag().on('start', (ev, d) => { if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+      .on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }))
+    .on('click', (ev, d) => {
+      ev.stopPropagation();
       if (d.nodeType === 'conversation') {
-        selectConversation(d.id);
+        openConversationTab(d.id);
       }
     })
-    .on('mouseenter', (event, d) => showTooltip(event, d))
+    .on('mouseenter', (ev, d) => showTooltip(ev, d))
     .on('mouseleave', () => hideTooltip());
 
-  // Labels
-  const label = g.append('g')
-    .selectAll('text')
-    .data(nodes)
-    .join('text')
+  const label = g.append('g').selectAll('text').data(nodes).join('text')
     .text(d => (d.label||'').length > 20 ? (d.label||'').slice(0, 18) + '..' : d.label||'')
-    .attr('font-size', d => Math.max(8, d.r * 0.5))
-    .attr('fill', 'var(--text-muted)')
-    .attr('text-anchor', 'middle')
-    .attr('dy', d => d.r + 12)
+    .attr('font-size', d => Math.max(8, d.r * 0.5)).attr('fill', 'var(--text-muted)')
+    .attr('text-anchor', 'middle').attr('dy', d => d.r + 12)
     .attr('opacity', d => isNodeVisible(d) ? 0.8 : 0);
 
-  // Title labels for conversation nodes
-  const titleLabels = g.append('g')
-    .selectAll('text.title-label')
-    .data(nodes.filter(d => d.nodeType === 'conversation'))
-    .join('text')
+  const titleLabels = g.append('g').selectAll('text.title-label')
+    .data(nodes.filter(d => d.nodeType === 'conversation')).join('text')
     .text(d => (d.label||'').length > 25 ? (d.label||'').slice(0, 23) + '..' : d.label||'')
-    .attr('font-size', 7)
-    .attr('fill', 'var(--accent)')
-    .attr('text-anchor', 'middle')
+    .attr('font-size', 7).attr('fill', 'var(--accent)').attr('text-anchor', 'middle')
     .attr('dy', d => -(getNodeRadius(d) + 2))
     .attr('opacity', d => isNodeVisible(d) ? 0.9 : 0);
 
-  // Tick
-  simulation.on('tick', () => {
-    link
-      .attr('x1', d => d.source.x)
-      .attr('y1', d => d.source.y)
-      .attr('x2', d => d.target.x)
-      .attr('y2', d => d.target.y);
-    node
-      .attr('cx', d => d.x)
-      .attr('cy', d => d.y);
-    label
-      .attr('x', d => d.x)
-      .attr('y', d => d.y);
-    titleLabels
-      .attr('x', d => d.x)
-      .attr('y', d => d.y);
+  sim.on('tick', () => {
+    link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    node.attr('cx', d => d.x).attr('cy', d => d.y);
+    label.attr('x', d => d.x).attr('y', d => d.y);
+    titleLabels.attr('x', d => d.x).attr('y', d => d.y);
   });
 
-  // Click background to deselect
   svg.on('click', () => {
     closeDetail();
     selectedConvId = null;
@@ -859,11 +1060,38 @@ function renderGraph() {
   });
 }
 
+function isNodeVisible(d) {
+  if (d.nodeType !== 'conversation') return true;
+  const conv = (graphData.conversations||[]).find(c => c.id === d.id);
+  if (!conv) return false;
+  if (searchTerm) {
+    const t = searchTerm.toLowerCase();
+    if (!(conv.title||'').toLowerCase().includes(t) &&
+        !(conv.summary||'').toLowerCase().includes(t)) return false;
+  }
+  if (activeFilters.intent.size > 0 && !activeFilters.intent.has(conv.intent)) return false;
+  if (activeFilters.model.size > 0 && !(conv.models||[]).some(m => activeFilters.model.has(m))) return false;
+  return true;
+}
+
+function updateGraphVisibility() {
+  if (activeTabId === 'overview') {
+    const svg = d3.select('#graph-svg');
+    svg.selectAll('circle').attr('opacity', d => isNodeVisible(d) ? 1 : 0.08);
+    svg.selectAll('text').attr('opacity', d => isNodeVisible(d) ? 0.8 : 0);
+    svg.selectAll('text.title-label').attr('opacity', d => isNodeVisible(d) ? 0.9 : 0);
+  }
+}
+
 function getNodeType(n) {
   if (n.type === 'paper' || n.type === 'graph_paper') return 'conversation';
   if (n.concept_type === 'topic') return 'topic';
   if (n.concept_type === 'intent') return 'intent';
   if (n.concept_type === 'model') return 'model';
+  if (n.concept_type === 'user') return 'query';
+  if (n.concept_type === 'assistant') return 'answer';
+  if (n.concept_type === 'tag') return 'tag';
+  if (n.concept_type === 'summary') return 'summary';
   return 'concept';
 }
 
@@ -874,40 +1102,167 @@ function getNodeColor(d) {
     case 'concept': return 'var(--yellow)';
     case 'intent': return 'var(--red)';
     case 'model': return 'var(--purple)';
+    case 'query': return '#f0883e';
+    case 'answer': return '#79c0ff';
+    case 'tag': return 'var(--text-dim)';
+    case 'summary': return 'var(--text-muted)';
     default: return 'var(--text-muted)';
   }
 }
 
 function getNodeRadius(d) {
   switch (d.nodeType) {
-    case 'conversation': return 14;
-    case 'topic': return 8;
-    case 'concept': return 6;
-    case 'intent': return 10;
-    case 'model': return 8;
-    default: return 6;
+    case 'conversation': return 16;
+    case 'topic': return 10;
+    case 'concept': return 8;
+    case 'intent': return 12;
+    case 'model': return 10;
+    case 'query': return 10;
+    case 'answer': return 10;
+    default: return 7;
   }
 }
 
-function isNodeVisible(d) {
-  if (d.nodeType !== 'conversation') return true;
-  const conv = graphData.conversations.find(c => c.id === d.id);
-  if (!conv) return false;
-  if (searchTerm) {
-    const t = searchTerm.toLowerCase();
-    if (!conv.title.toLowerCase().includes(t) &&
-        !conv.summary.toLowerCase().includes(t)) return false;
+// ── Subgraph (split view: graph + grouped message panel) ─────────────────
+function renderSubgraph(data) {
+  const { width, height } = getGraphDimensions();
+  // Reserve bottom 45% for message panel
+  const graphH = Math.floor(height * 0.55);
+  const panelH = height - graphH;
+
+  const container = d3.select('#graph-svg');
+  container.selectAll('*').remove();
+  container.selectAll('.subgraph-panel').remove();
+
+  // ── Graph section ──
+  const svg = container.append('svg').attr('width', width).attr('height', graphH);
+  const g = svg.append('g');
+
+  const zoom = d3.zoom().scaleExtent([0.2, 4])
+    .on('zoom', (event) => g.attr('transform', event.transform));
+  svg.call(zoom);
+
+  const nodes = data.nodes.map(n => ({ ...n, nodeType: getNodeType(n), r: getNodeRadius(n) }));
+  const links = data.links.map(l => ({ source: l.source, target: l.target, relation: l.relation }));
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(100))
+    .force('charge', d3.forceManyBody().strength(-300))
+    .force('center', d3.forceCenter(width / 2, graphH / 2))
+    .force('collision', d3.forceCollide().radius(d => d.r + 10));
+  simulations[activeTabId] = sim;
+
+  const link = g.append('g').selectAll('line').data(links).join('line')
+    .attr('stroke', 'var(--border)').attr('stroke-width', 1.5).attr('stroke-opacity', 0.5);
+
+  const linkLabels = g.append('g').selectAll('text').data(links).join('text')
+    .text(d => d.relation).attr('font-size', 8).attr('fill', 'var(--text-dim)')
+    .attr('text-anchor', 'middle');
+
+  const node = g.append('g').selectAll('circle').data(nodes).join('circle')
+    .attr('r', d => d.r).attr('fill', d => getNodeColor(d))
+    .attr('stroke', 'var(--bg-primary)').attr('stroke-width', 2)
+    .style('cursor', 'pointer')
+    .call(d3.drag().on('start', (ev, d) => { if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+      .on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }))
+    .on('mouseenter', (ev, d) => showSubgraphTooltip(ev, d, data))
+    .on('mouseleave', () => hideTooltip());
+
+  const label = g.append('g').selectAll('text').data(nodes).join('text')
+    .text(d => (d.label||'').length > 22 ? (d.label||'').slice(0, 20) + '..' : d.label||'')
+    .attr('font-size', d => Math.max(8, d.r * 0.45)).attr('fill', 'var(--text-secondary)')
+    .attr('text-anchor', 'middle').attr('dy', d => d.r + 14);
+
+  sim.on('tick', () => {
+    link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    linkLabels.attr('x', d => (d.source.x + d.target.x) / 2)
+      .attr('y', d => (d.source.y + d.target.y) / 2);
+    node.attr('cx', d => d.x).attr('cy', d => d.y);
+    label.attr('x', d => d.x).attr('y', d => d.y);
+  });
+
+  // ── Grouped message panel ──
+  const panel = container.append('div').attr('class', 'subgraph-panel')
+    .style('height', panelH + 'px').style('overflow-y', 'auto');
+
+  const conv = data.conversation || {};
+  const groups = data.message_groups || {};
+
+  // Header
+  panel.append('div').attr('class', 'sg-header').html(`
+    <strong>${esc(conv.title||'Conversation')}</strong>
+    <span style="color:var(--text-muted);font-size:11px;margin-left:8px;">
+      Intent: ${esc(conv.intent||'?')} · Topics: ${(conv.topics||[]).join(', ')}
+    </span>
+  `);
+
+  // Groups
+  for (const [groupKey, msgs] of Object.entries(groups)) {
+    const groupDiv = panel.append('div').attr('class', 'sg-group');
+    groupDiv.append('div').attr('class', 'sg-group-title')
+      .html(`<span class="sg-intent-tag" style="background:${intentColor(groupKey)}33;color:${intentColor(groupKey)}">${esc(groupKey)}</span> ${msgs.length} queries`);
+
+    for (const msg of msgs) {
+      const card = groupDiv.append('div').attr('class', 'sg-msg-card')
+        .attr('data-msg-idx', msg.index)
+        .on('click', () => highlightSubgraphNode(msg.index, data));
+
+      const topicsHtml = (msg.topics||[]).map(t =>
+        `<span class="sg-topic-tag">${esc(t)}</span>`
+      ).join('');
+
+      card.html(`
+        <div class="sg-msg-query">${esc(truncate(msg.content, 180))}</div>
+        <div class="sg-msg-meta">
+          ${topicsHtml}
+          ${msg.model ? `<span style="color:var(--text-muted);font-size:10px;">${esc(msg.model)}</span>` : ''}
+        </div>
+        ${msg.answer ? `<div class="sg-msg-answer">${esc(truncate(msg.answer, 120))}</div>` : ''}
+      `);
+    }
   }
-  if (activeFilters.intent.size > 0 && !activeFilters.intent.has(conv.intent)) return false;
-  if (activeFilters.model.size > 0 && !conv.models.some(m => activeFilters.model.has(m))) return false;
-  return true;
 }
 
-function updateGraphVisibility() {
-  const svg = d3.select('#graph-svg');
-  svg.selectAll('circle').attr('opacity', d => isNodeVisible(d) ? 1 : 0.08);
-  svg.selectAll('text').attr('opacity', d => isNodeVisible(d) ? 0.8 : 0);
-  svg.selectAll('text.title-label').attr('opacity', d => isNodeVisible(d) ? 0.9 : 0);
+function truncate(s, n) { return (s||'').length > n ? (s||'').slice(0, n) + '...' : s||''; }
+
+function intentColor(intent) {
+  const colors = { build:'#58a6ff', debug:'#f85149', explain:'#3fb950', compare:'#d29922',
+    design:'#bc8cff', optimize:'#f0883e', explore:'#79c0ff', integrate:'#3fb950',
+    deploy:'#58a6ff', troubleshoot:'#f85149', analyze:'#d29922', research:'#bc8cff' };
+  return colors[intent] || '#8b949e';
+}
+
+function highlightSubgraphNode(msgIdx, data) {
+  const msgId = `msg_${data.conversation.id}_${msgIdx}`;
+  const svg = d3.select('#graph-svg svg');
+  // Reset all
+  svg.selectAll('circle').attr('opacity', 0.3).attr('stroke-width', 1);
+  svg.selectAll('line').attr('stroke-opacity', 0.15);
+  // Highlight the selected message node and its connected edges
+  svg.selectAll('circle').filter(d => d && d.id === msgId)
+    .attr('opacity', 1).attr('stroke', '#fff').attr('stroke-width', 3);
+  svg.selectAll('line').filter(d => d && (d.source.id === msgId || d.target.id === msgId))
+    .attr('stroke-opacity', 0.8);
+  // Find answer node too
+  const answerIdx = msgIdx + 1;
+  if (answerIdx < (data.messages||[]).length) {
+    const ansId = `msg_${data.conversation.id}_${answerIdx}`;
+    svg.selectAll('circle').filter(d => d && d.id === ansId)
+      .attr('opacity', 1).attr('stroke', '#fff').attr('stroke-width', 2);
+  }
+}
+
+function showSubgraphTooltip(event, d, data) {
+  const tip = d3.select('body').append('div').attr('class', 'tooltip');
+  let html = `<h3>${esc(d.label)}</h3>`;
+  html += `<p class="tt-meta">Type: ${d.nodeType}</p>`;
+  tip.html(html).style('left', (event.pageX + 12) + 'px').style('top', (event.pageY - 10) + 'px');
+}
+
+function hideTooltip() {
+  d3.selectAll('.tooltip').remove();
 }
 
 // ── Tooltip ───────────────────────────────────────────────────────────────
@@ -1091,18 +1446,27 @@ async function submitImport() {
       return;
     }
 
-    const count = result.conversations ?? result?.stats?.conversations ?? 0;
-    setImportStatus(`Imported ${count} conversations. Reloading...`, 'success');
+    const count = result.conversations_added ?? 0;
+    setImportStatus(`Imported ${count} conversations. Rebuilding knowledge graph...`, 'info');
 
-    // Reload graph data
-    graphData = await (await fetch('/api/graph?force=1')).json();
-    if (graphData && graphData.nodes) {
-      render();
-      closeImportModal();
-    } else {
-      setImportStatus('Graph rebuild in progress, refreshing...', 'info');
-      setTimeout(() => location.reload(), 2000);
-    }
+    closeImportModal();
+
+    // Poll until graph is ready, then refresh
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const r = await fetch('/api/graph');
+        const d = await r.json();
+        if (d && d.nodes && d.nodes.length > 0 && d.stats && d.stats.conversations > 0) {
+          clearInterval(poll);
+          graphData = d;
+          render();
+        }
+      } catch (_) {}
+      if (attempts > 120) { clearInterval(poll); location.reload(); }
+    }, 1000);
+    return;
   } catch (e) {
     setImportStatus(e.message || 'Import failed', 'error');
     btn.disabled = false;

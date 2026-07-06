@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -32,11 +33,20 @@ MAX_WORKERS = 6
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 def load_chat_data() -> list[dict]:
-    for f in CHAT_HISTORY_PATH.glob("*.json"):
+    all_convs: list[dict] = []
+    seen_ids: set[str] = set()
+    for f in sorted(CHAT_HISTORY_PATH.glob("*.json")):
         with open(f) as fh:
             data = json.load(fh)
-        return data.get("data", [])
-    return []
+        convs = data.get("data", []) if isinstance(data, dict) else data
+        for c in convs:
+            cid = c.get("id") or c.get("_id")
+            if cid and cid not in seen_ids:
+                seen_ids.add(cid)
+                all_convs.append(c)
+            elif not cid:
+                all_convs.append(c)
+    return all_convs
 
 
 def get_user_queries_and_answers(conv: dict) -> list[dict]:
@@ -198,7 +208,9 @@ def build_knowledge_graph(convs: list[dict]) -> dict:
         conv_topics = _normalize_str_items(extraction.get("topics", []))
         conv_concepts = _normalize_str_items(extraction.get("concepts", []))
         conv_intent = extraction.get("intent", "other")
-        if isinstance(conv_intent, dict):
+        if isinstance(conv_intent, list):
+            conv_intent = conv_intent[0] if conv_intent else "other"
+        elif not isinstance(conv_intent, str):
             conv_intent = str(conv_intent)
         conv_tags = _normalize_str_items(extraction.get("tags", []))
         conv_summary = extraction.get("summary", title)
@@ -372,6 +384,143 @@ def api_conversation(conv_id: str):
     return jsonify({"error": "not found"}), 404
 
 
+@app.route("/api/conversation-subgraph/<conv_id>")
+def api_conversation_subgraph(conv_id: str):
+    """Return a focused subgraph for a single conversation."""
+    convs = load_chat_data()
+    conv = None
+    for c in convs:
+        if c.get("id") == conv_id:
+            conv = c
+            break
+    if not conv:
+        return jsonify({"error": "not found"}), 404
+
+    cache = build_cache()
+    extraction = cache.get(conv_id, {})
+    conv_topics = _normalize_str_items(extraction.get("topics", []))
+    conv_concepts = _normalize_str_items(extraction.get("concepts", []))
+    conv_intent = extraction.get("intent", "other")
+    conv_tags = _normalize_str_items(extraction.get("tags", []))
+    conv_summary = extraction.get("summary", conv.get("title", ""))
+    conv_models = conv.get("chat", {}).get("models", []) or []
+
+    messages = get_user_queries_and_answers(conv)
+    title = conv.get("title", "Untitled")
+
+    hg = HiveGraph(id=f"subgraph_{conv_id}")
+
+    def add_node(nid: str, ntype: str, label: str, ctype: str = "") -> None:
+        hg.nodes.append(Node(
+            id=nid, type=ntype, label=label[:60],
+            concept_type=ctype,
+        ))
+
+    def add_edge(src: str, tgt: str, rel: str = "related_to") -> None:
+        hg.edges.append(Edge(source=src, target=tgt, relation=rel))
+
+    # Center conversation node
+    conv_nid = f"conv_{conv_id}"
+    add_node(conv_nid, "graph_paper", title)
+
+    # Summary
+    if conv_summary:
+        sum_nid = f"summary_{conv_id}"
+        add_node(sum_nid, "concept", conv_summary[:60], "summary")
+        add_edge(conv_nid, sum_nid, "describes")
+
+    # Topics
+    for t in conv_topics:
+        tid = f"topic_{t.lower().strip()}"
+        add_node(tid, "concept", t, "topic")
+        add_edge(conv_nid, tid, "related_to")
+
+    # Concepts
+    for cpt in conv_concepts:
+        cid = f"concept_{cpt.lower().strip()}"
+        add_node(cid, "concept", cpt, "concept")
+        add_edge(conv_nid, cid, "related_to")
+
+    # Intent
+    if conv_intent:
+        iid = f"intent_{conv_intent.lower().strip()}"
+        add_node(iid, "concept", conv_intent, "intent")
+        add_edge(conv_nid, iid, "has_intent")
+
+    # Models
+    for m in conv_models:
+        mid = f"model_{m.lower().strip()}"
+        add_node(mid, "concept", m, "model")
+        add_edge(conv_nid, mid, "uses")
+
+    # Messages (queries and answers)
+    for i, msg in enumerate(messages):
+        mid = f"msg_{conv_id}_{i}"
+        role = msg.get("role", "user")
+        content = (msg.get("content") or "")[:80]
+        label = f"[{role.upper()}] {content}"
+        add_node(mid, "paper" if role == "user" else "graph_paper", label, role)
+
+        if role == "user":
+            add_edge(conv_nid, mid, "contains")
+            # Connect user query to topics
+            for t in conv_topics:
+                add_edge(mid, f"topic_{t.lower().strip()}", "about")
+            # Connect user query to intent
+            if conv_intent:
+                add_edge(mid, f"intent_{conv_intent.lower().strip()}", "expresses")
+        else:
+            # Connect answer to the previous user query
+            if i > 0 and messages[i - 1].get("role") == "user":
+                prev_mid = f"msg_{conv_id}_{i - 1}"
+                add_edge(prev_mid, mid, "answers")
+            add_edge(conv_nid, mid, "contains")
+
+    # Tags as nodes
+    for tag in conv_tags:
+        tid = f"tag_{tag.lower().strip().replace(' ', '_')}"
+        add_node(tid, "concept", tag, "tag")
+        add_edge(conv_nid, tid, "tagged")
+
+    # Group messages by intent and topic
+    message_groups: dict[str, list[dict]] = {}
+    for i, msg in enumerate(messages):
+        if msg.get("role") != "user":
+            continue
+        content = (msg.get("content") or "").lower()
+        # Assign a topic based on keyword overlap with conversation topics
+        matched_topics = [t for t in conv_topics if any(w in content for w in t.lower().split())]
+        group_key = conv_intent if matched_topics else conv_intent
+        if not group_key:
+            group_key = "other"
+        if group_key not in message_groups:
+            message_groups[group_key] = []
+        message_groups[group_key].append({
+            "index": i,
+            "content": msg.get("content", ""),
+            "model": msg.get("model", ""),
+            "topics": matched_topics or conv_topics[:1],
+            "intent": conv_intent,
+            "answer": messages[i + 1].get("content", "") if i + 1 < len(messages) and messages[i + 1].get("role") == "assistant" else "",
+        })
+
+    result = hg.to_node_link_dict()
+    result["conversation"] = {
+        "id": conv_id,
+        "title": title,
+        "summary": conv_summary,
+        "intent": conv_intent,
+        "models": conv_models,
+        "topics": conv_topics,
+        "concepts": conv_concepts,
+        "tags": conv_tags,
+        "message_count": len(messages),
+    }
+    result["messages"] = messages
+    result["message_groups"] = message_groups
+    return jsonify(result)
+
+
 @app.route("/api/refresh")
 def api_refresh():
     get_graph_data(force=True)
@@ -418,16 +567,26 @@ def api_import_json():
         with open(out_path, "w") as f:
             json.dump(data, f, indent=2)
 
-        # Invalidate graph cache so it reloads all chat files
-        global _graph_data
+        # Invalidate graph cache and rebuild in background
+        global _graph_data, _build_in_progress
         _graph_data = None
-        graph = get_graph_data(force=True)
+        _build_in_progress = True
+
+        def rebuild():
+            global _graph_data, _build_in_progress
+            try:
+                _graph_data = build_knowledge_graph(load_chat_data())
+            finally:
+                _build_in_progress = False
+
+        conv_count = sum(1 for c in (data.get("data", []) if isinstance(data, dict) else data))
+        threading.Thread(target=rebuild, daemon=True).start()
 
         return jsonify({
-            "status": "ok",
+            "status": "imported",
             "filename": out_path.name,
-            "conversations": len(graph.get("conversations", [])),
-            "stats": graph.get("stats", {}),
+            "conversations_added": conv_count,
+            "rebuilding": True,
         })
 
     except json.JSONDecodeError:
@@ -453,19 +612,30 @@ def api_chat_files():
 
 if __name__ == "__main__":
     import webbrowser
-    print("Loading chat history and extracting entities via Ollama...")
-    data = get_graph_data()
-    if data.get("error"):
-        print("  Graph build in progress, starting server anyway...")
-    else:
-        s = data["stats"]
-        print(f"  Conversations: {s['conversations']}")
-        print(f"  Topics: {s['topics']}")
-        print(f"  Concepts: {s['concepts']}")
-        print(f"  Intents: {s['intents']}")
-        print(f"  Models: {', '.join(s['models'])}")
-        print(f"  Nodes: {len(data['nodes'])}")
-        print(f"  Edges: {len(data['links'])}")
-    print(f"\n  Dashboard at http://127.0.0.1:5001")
+
+    # Load chat data in background so server starts immediately
+    def _startup_build():
+        global _graph_data, _build_in_progress
+        _build_in_progress = True
+        try:
+            data = build_knowledge_graph(load_chat_data())
+            _graph_data = data
+            s = data.get("stats", {})
+            print(f"  Conversations: {s.get('conversations', 0)}")
+            print(f"  Topics: {s.get('topics', 0)}")
+            print(f"  Concepts: {s.get('concepts', 0)}")
+            print(f"  Intents: {s.get('intents', 0)}")
+            print(f"  Models: {', '.join(s.get('models', []))}")
+            print(f"  Nodes: {len(data.get('nodes', []))}")
+            print(f"  Edges: {len(data.get('links', []))}")
+            print("  Background build complete")
+        finally:
+            _build_in_progress = False
+
+    bg = threading.Thread(target=_startup_build, daemon=True)
+    bg.start()
+
+    print("Starting dashboard at http://127.0.0.1:5001")
+    print("  Graph is building in background — check back in a moment")
     webbrowser.open("http://127.0.0.1:5001")
     app.run(debug=True, port=5001, use_reloader=False)
