@@ -1827,99 +1827,93 @@ function renderSGTimeline(data, viewport, w, h) {
 }
 
 function showTLDetail(node, viewport, conv, w, panelH) {
-  // Remove existing detail panel
-  viewport.querySelector('#tl-detail-panel')?.remove();
-
-  var panel = d3.select(viewport).append('div').attr('id', 'tl-detail-panel')
-    .style('height', panelH + 'px').style('overflow-y', 'auto')
-    .style('background', 'var(--bg-secondary)').style('border-top', '1px solid var(--border)')
-    .style('padding', '8px 16px');
+  // Remove existing overlay
+  d3.select('#tl-overlay').remove();
 
   var msg = node._msg;
   var topics = (node._topics||[]).join(', ') || '\u2014';
+  var tags = (msg.tags||[]).length > 0 ? msg.tags.join(', ') : '';
+  var intentLabel = node._intent || '\u2014';
+  var col = node._color || '#8b949e';
 
-  panel.html([
-    '<div style="display:flex;gap:8px;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;">',
-      '<span class="filter-tag active" style="font-size:11px;background:' + node._color + '22;color:' + node._color + ';border-color:' + node._color + '" onclick="showTLTab(this,\'concept\')">Concept</span>',
-      '<span class="filter-tag" style="font-size:11px" onclick="showTLTab(this,\'intent\')">Intent</span>',
-      '<span class="filter-tag" style="font-size:11px" onclick="showTLTab(this,\'topic\')">Topic</span>',
-    '</div>',
-    '<div id="tl-tab-content">',
-      '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px;"><b>Query:</b> ' + esc(msg.content||'') + '</div>',
-      '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;"><b>Answer:</b> ' + esc(node._answer||'\u2014') + '</div>',
-      '<div style="font-size:11px;color:var(--text-dim);margin-top:4px;"><b>Concepts:</b> ' + topics + '</div>',
-    '</div>',
-    '<div id="tl-tab-intent" style="display:none;font-size:12px;color:var(--text-secondary);">',
-      '<div><b>Intent:</b> ' + esc(node._intent||'\u2014') + '</div>',
-      '<div style="margin-top:4px;font-size:11px;color:var(--text-muted);"><b>Conversation:</b> ' + esc(conv.title||'') + '</div>',
-    '</div>',
-    '<div id="tl-tab-topic" style="display:none;font-size:12px;color:var(--text-secondary);">',
-      '<div><b>Topics:</b> ' + topics + '</div>',
-      '<div style="margin-top:4px;font-size:11px;color:var(--text-dim);"><b>Model:</b> ' + (msg.model||'\u2014') + '</div>',
-    '</div>',
-  ].join('\n'));
+  // Compute overlay position: center of viewport
+  var vr = viewport.getBoundingClientRect();
+  var ox = Math.max(20, Math.min(w - 420, w / 2 - 200));
+  var oy = 20;
+
+  var overlay = d3.select(viewport).append('div').attr('id', 'tl-overlay')
+    .style('position', 'absolute').style('top', oy + 'px').style('left', ox + 'px')
+    .style('width', '400px').style('max-height', (panelH - 40) + 'px')
+    .style('background', 'var(--bg-secondary)').style('border', '1px solid var(--border)')
+    .style('border-radius', '10px').style('box-shadow', '0 8px 32px rgba(0,0,0,0.5)')
+    .style('z-index', '200').style('overflow-y', 'auto').style('padding', '16px');
+
+  // Close button
+  overlay.append('div')
+    .style('position', 'absolute').style('top', '8px').style('right', '12px')
+    .style('cursor', 'pointer').style('color', 'var(--text-muted)').style('font-size', '18px')
+    .text('\u00d7')
+    .on('click', function() { d3.select('#tl-overlay').remove(); });
+
+  // Header with intent badge
+  overlay.append('div').style('display','flex').style('align-items','center').style('gap','8px').style('margin-bottom','10px').html(
+    '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;background:' + col + '22;color:' + col + '">' + esc(intentLabel) + '</span>' +
+    '<span style="font-size:11px;color:var(--text-muted)">' + (msg.model||'') + '</span>'
+  );
+
+  // Tabs
+  overlay.append('div').style('display','flex').style('gap','6px').style('border-bottom','1px solid var(--border)').style('padding-bottom','6px').style('margin-bottom','8px').html(
+    '<span class="filter-tag active" style="font-size:11px;background:' + col + '22;color:' + col + ';border-color:' + col + '" onclick="showTLTab(this,\'concept\')">Concept</span>' +
+    '<span class="filter-tag" style="font-size:11px" onclick="showTLTab(this,\'intent\')">Intent</span>' +
+    '<span class="filter-tag" style="font-size:11px" onclick="showTLTab(this,\'topic\')">Topic</span>'
+  );
+
+  // Concept tab content
+  overlay.append('div').attr('id', 'tl-tab-content').html(
+    '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;"><b>Query:</b><br>' + esc(msg.content||'') + '</div>' +
+    '<div style="font-size:11px;color:var(--text-muted);margin-top:6px;"><b>Answer:</b><br>' + esc(node._answer||'\u2014') + '</div>' +
+    (tags ? '<div style="font-size:11px;color:var(--text-accent);margin-top:6px;"><b>Tags:</b> ' + esc(tags) + '</div>' : '') +
+    '<div style="font-size:11px;color:var(--text-dim);margin-top:6px;"><b>Concepts:</b> ' + topics + '</div>'
+  );
+
+  // Intent tab
+  overlay.append('div').attr('id', 'tl-tab-intent').style('display','none').html(
+    '<div style="font-size:12px;color:var(--text-secondary);"><b>Intent:</b> ' + esc(intentLabel) + '</div>' +
+    '<div style="margin-top:6px;font-size:11px;color:var(--text-muted);"><b>Conversation:</b> ' + esc(conv.title||'') + '</div>'
+  );
+
+  // Topic tab
+  overlay.append('div').attr('id', 'tl-tab-topic').style('display','none').html(
+    '<div style="font-size:12px;color:var(--text-secondary);"><b>Topics:</b> ' + topics + '</div>' +
+    '<div style="margin-top:6px;font-size:11px;color:var(--text-dim);"><b>Model:</b> ' + (msg.model||'\u2014') + '</div>' +
+    (tags ? '<div style="margin-top:6px;font-size:11px;color:var(--text-dim);"><b>Tags:</b> ' + esc(tags) + '</div>' : '')
+  );
+
+  // Click outside to close
+  setTimeout(function() {
+    d3.select(viewport).on('click.tlclose', function(e) {
+      if (!e.target.closest('#tl-overlay')) {
+        d3.select('#tl-overlay').remove();
+        d3.select(viewport).on('click.tlclose', null);
+      }
+    });
+  }, 0);
+
   _selectedTimelineNode = node;
 }
 
 function showTLTab(el, tab) {
+  if (!el) return;
   el.parentElement.querySelectorAll('.filter-tag').forEach(function(t) { t.classList.remove('active'); });
   el.classList.add('active');
-  var c = document.getElementById('tl-tab-content');
-  var i = document.getElementById('tl-tab-intent');
-  var t = document.getElementById('tl-tab-topic');
-  if (c) c.style.display = tab === 'concept' ? '' : 'none';
-  if (i) i.style.display = tab === 'intent' ? '' : 'none';
-  if (t) t.style.display = tab === 'topic' ? '' : 'none';
-}
-
-function createTLDetailPanel(viewport) {
-  const panel = document.createElement('div');
-  panel.id = 'tl-detail-panel';
-  panel.style.cssText = `
-    height: 180px; background: var(--bg-secondary); border-top: 1px solid var(--border);
-    padding: 8px 16px; overflow-y: auto; display: flex; flex-direction: column;
-  `;
-  panel.innerHTML = `<div style="color:var(--text-muted);font-size:12px;padding:20px;text-align:center;">Click a message node to see details</div>`;
-  viewport.appendChild(panel);
-  return panel;
-}
-
-function showTLDetail(node, panel, conv) {
-  const msg = node._msg;
-  const topics = (node._topics||[]).join(', ') || '—';
-  const answer = node._answer || '—';
-
-  panel.innerHTML = `
-    <div style="display:flex;gap:12px;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;">
-      <span class="filter-tag active" style="font-size:11px;background:${node._color}22;color:${node._color};border-color:${node._color}" onclick="showTLTab(this,'concept')">Concept</span>
-      <span class="filter-tag" style="font-size:11px" onclick="showTLTab(this,'intent')">Intent</span>
-      <span class="filter-tag" style="font-size:11px" onclick="showTLTab(this,'topic')">Topic</span>
-    </div>
-    <div id="tl-tab-content">
-      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px;"><strong>Query:</strong> ${esc(msg.content||'')}</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;"><strong>Answer:</strong> ${esc(answer)}</div>
-      <div style="font-size:11px;color:var(--text-dim);margin-top:4px;"><strong>Concepts:</strong> ${topics}</div>
-    </div>
-    <div id="tl-tab-intent" style="display:none;font-size:12px;color:var(--text-secondary);">
-      <div><strong>Intent:</strong> ${esc(node._intent||'—')}</div>
-      <div style="margin-top:4px;font-size:11px;color:var(--text-muted);"><strong>Conversation:</strong> ${esc(conv.title||'')}</div>
-    </div>
-    <div id="tl-tab-topic" style="display:none;font-size:12px;color:var(--text-secondary);">
-      <div><strong>Topics:</strong> ${topics}</div>
-      <div style="margin-top:4px;font-size:11px;color:var(--text-dim);"><strong>Model:</strong> ${msg.model||'—'}</div>
-    </div>
-  `;
-  _selectedTimelineNode = node;
-}
-
-function showTLTab(el, tab) {
-  el.parentElement.querySelectorAll('.filter-tag').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('tl-tab-content').style.display = tab === 'concept' ? '' : 'none';
-  const i = document.getElementById('tl-tab-intent');
-  const t = document.getElementById('tl-tab-topic');
-  if (i) i.style.display = tab === 'intent' ? '' : 'none';
-  if (t) t.style.display = tab === 'topic' ? '' : 'none';
+  var overlay = document.getElementById('tl-overlay');
+  if (!overlay) return;
+  ['tl-tab-content', 'tl-tab-intent', 'tl-tab-topic'].forEach(function(id) {
+    var el2 = overlay.querySelector('#' + id);
+    if (el2) el2.style.display = 'none';
+  });
+  var target = overlay.querySelector('#' + (tab === 'concept' ? 'tl-tab-content' : tab === 'intent' ? 'tl-tab-intent' : 'tl-tab-topic'));
+  if (target) target.style.display = '';
 }
 
 
