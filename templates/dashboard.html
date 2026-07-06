@@ -1754,25 +1754,40 @@ function renderSGTimeline(data, viewport, w, h) {
   var maxX = w - 40;
   var leftMargin = 160;
 
+  // Compute group sizes for sizing nodes proportionally
+  var maxGroupSize = 1;
+  for (const t of timeline) { if (t.msgs.length > maxGroupSize) maxGroupSize = t.msgs.length; }
+
   for (const group of timeline) {
+    var groupSize = group.msgs.length;
     // Group label
     var labelId = 'lbl_' + group.label.replace(/[^a-z0-9]/gi, '_');
-    allNodes.push({id: labelId, label: group.label, type: 'intent', y: yPos, x: 12,
+    // Size prefix for label
+    var groupLabel = '[' + groupSize + '] ' + group.label;
+    allNodes.push({id: labelId, label: groupLabel, type: 'intent', y: yPos, x: 12,
       _isLabel: true, _color: group.color});
     yPos += 22;
 
     // Messages in this group
     var col = 0;
     var maxCol = Math.max(1, Math.floor((maxX - leftMargin) / 180));
+    var nodeScale = Math.max(0.5, groupSize / maxGroupSize);  // 0.5 to 1.0
+
     for (var i = 0; i < group.msgs.length && i < 500; i++) {
       var msg = group.msgs[i];
       var nid = 'tn_' + msg.index;
       var nx = leftMargin + (col % maxCol) * 180;
       var ny = yPos;
 
+      // Size the node based on group size: width = 6 + 16 * scale, height = 10 + 20 * scale
+      var nw = 6 + 14 * nodeScale;
+      var nh = 10 + 20 * nodeScale;
+
+      var labelPrefix = '[' + groupSize + '] ';
       allNodes.push({
-        id: nid, label: truncate(msg.content, 32), type: 'query',
-        x: nx, y: ny, _msg: msg, _intent: group.label, _color: group.color,
+        id: nid, label: labelPrefix + truncate(msg.content, Math.max(20, Math.floor(30 * nodeScale))), type: 'query',
+        x: nx, y: ny, _w: nw, _h: nh, _scale: nodeScale,
+        _msg: msg, _intent: group.label, _color: group.color,
         _index: msg.index, _topics: msg.topics || [],
         _answer: truncate(msg.answer || '', 50),
       });
@@ -1781,9 +1796,9 @@ function renderSGTimeline(data, viewport, w, h) {
       if (i > 0) allLinks.push({source: 'tn_' + group.msgs[i-1].index, target: nid});
 
       col++;
-      if (col >= maxCol) { col = 0; yPos += 50; }
+      if (col >= maxCol) { col = 0; yPos += Math.max(50, 30 + nh * 1.5); }
     }
-    yPos = Math.max(yPos + 10, allNodes.filter(n => !n._isLabel).reduce((m, n) => Math.max(m, n.y + 30), yPos));
+    yPos = Math.max(yPos + 10, allNodes.filter(n => !n._isLabel).reduce(function(m, n) { return Math.max(m, n.y + (n._h || 30) + 10); }, yPos));
   }
 
   // ── Render ──
@@ -1813,16 +1828,19 @@ function renderSGTimeline(data, viewport, w, h) {
   for (const n of allNodes) {
     if (n._isLabel) continue;
     var gg = nodeG.append('g').attr('class', 'tl-node').style('cursor', 'pointer');
-    gg.append('rect').attr('x', n.x - 4).attr('y', n.y - 7).attr('width', 8).attr('height', 14).attr('rx', 2)
-      .attr('fill', n._color).attr('stroke', n._color).attr('stroke-width', 1);
-    gg.append('text').attr('x', n.x + 10).attr('y', n.y + 3).attr('font-size', '10px').attr('fill', 'var(--text-secondary)').text(n.label);
+    gg.append('rect').attr('x', n.x - n._w/2).attr('y', n.y - n._h/2)
+      .attr('width', n._w).attr('height', n._h).attr('rx', 4)
+      .attr('fill', n._color).attr('stroke', n._color).attr('stroke-width', 1.5 * n._scale);
+    gg.append('text').attr('x', n.x + n._w/2 + 4).attr('y', n.y + 3).attr('font-size', Math.max(8, 10 * n._scale) + 'px')
+      .attr('fill', 'var(--text-secondary)').text(n.label);
     if (n._topics.length > 0) {
-      gg.append('text').attr('x', n.x + 10).attr('y', n.y + 16).attr('font-size', '8px').attr('fill', 'var(--text-dim)')
+      gg.append('text').attr('x', n.x + n._w/2 + 4).attr('y', n.y + 14 + 6 * n._scale)
+        .attr('font-size', Math.max(7, 8 * n._scale) + 'px').attr('fill', 'var(--text-dim)')
         .text(n._topics.slice(0, 2).join(' '));
     }
     gg.on('click', function(m) { return function() { showTLDetail(m, viewport, conv, w, panelH); }; }(n));
     gg.on('mouseenter', function() { d3.select(this).select('rect').attr('stroke', '#fff').attr('stroke-width', 2); });
-    gg.on('mouseleave', function() { d3.select(this).select('rect').attr('stroke', d3.select(this).datum()?._color || n._color).attr('stroke-width', 1); });
+    gg.on('mouseleave', function() { d3.select(this).select('rect').attr('stroke', d3.select(this).datum()?._color || n._color).attr('stroke-width', 1.5 * n._scale); });
   }
 }
 
