@@ -9,6 +9,7 @@ services:
       - .intent_cache:/app/.intent_cache
       - .knowledge_store:/app/.knowledge_store
       - ./.extraction_cache.json:/app/.extraction_cache.json
+      - ./.notes_store:/app/.notes_store
     environment:
       - OLLAMA_URL=http://host.docker.internal:11434/api/generate
       - EMBED_URL=http://host.docker.internal:11434/api/embed

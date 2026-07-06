@@ -8,7 +8,7 @@ COPY app.py intent_engine.py knowledge_store.py cluster_store.py cluster_kg.py c
 COPY templates/ templates/
 COPY static/ static/
 
-RUN mkdir -p chatHistory .intent_cache .knowledge_store
+RUN mkdir -p chatHistory .intent_cache .knowledge_store .notes_store
 
 EXPOSE 5001
 
