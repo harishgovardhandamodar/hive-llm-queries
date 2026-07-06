@@ -2,9 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir flask requests
+RUN pip install --no-cache-dir flask requests numpy
 
-COPY app.py intent_engine.py knowledge_store.py prebuild_cache.py hive_datatype.py ./
+COPY app.py intent_engine.py knowledge_store.py cluster_store.py prebuild_cache.py hive_datatype.py ./
 COPY templates/ templates/
 COPY static/ static/
 

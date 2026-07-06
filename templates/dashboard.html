@@ -637,6 +637,322 @@ a:hover { text-decoration: underline; }
 .modal-status.success { background: var(--green)22; color: var(--green); border: 1px solid var(--green)33; }
 .modal-status.error { background: var(--red)22; color: var(--red); border: 1px solid var(--red)33; }
 .modal-status.info { background: var(--accent)22; color: var(--accent); border: 1px solid var(--accent)33; }
+
+/* ── Cluster View ─────────────────────────────────────────────────────── */
+.cluster-build-bar {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.cluster-build-bar .btn { font-size: 11px; padding: 4px 10px; }
+.cluster-status {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.cluster-search {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.cluster-search input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  outline: none;
+}
+.cluster-search input:focus { border-color: var(--accent); }
+.cluster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.cluster-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cluster-card:hover { border-color: var(--accent); box-shadow: 0 2px 12px var(--shadow); }
+.cluster-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cluster-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cluster-card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+.cluster-card-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 10px;
+}
+.cluster-card-queries {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cluster-card-query {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 3px 6px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+}
+.cluster-card-conv-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.cluster-conv-tag {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-dim);
+  white-space: nowrap;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cluster-expanded {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.cluster-expanded-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.cluster-back {
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+}
+.cluster-back:hover { text-decoration: underline; }
+.cluster-expanded-label {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+.cluster-expanded-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.cluster-pair {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  transition: border-color 0.15s;
+}
+.cluster-pair:hover { border-color: var(--accent); }
+.cluster-pair-query {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+.cluster-pair-answer {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  overflow: hidden;
+  cursor: pointer;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.cluster-pair-answer:hover { color: var(--text-secondary); }
+.cluster-pair-fade {
+  font-size: 10px;
+  color: var(--accent);
+  margin-top: 2px;
+  cursor: pointer;
+  user-select: none;
+}
+.cluster-pair-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.cluster-pair-conv {
+  font-size: 10px;
+  color: var(--accent);
+  cursor: pointer;
+}
+.cluster-pair-conv:hover { text-decoration: underline; }
+.cluster-pair-model {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.cluster-pair-score {
+  font-size: 10px;
+  color: var(--green);
+}
+.cluster-pair-topics {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.cluster-graph-container {
+  height: 340px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  background: var(--bg-primary);
+  position: relative;
+}
+.cluster-graph-container svg { width: 100%; height: 100%; }
+.cluster-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--accent);
+  color: #fff;
+  padding: 0 4px;
+}
+
+/* ── Log Panel ─────────────────────────────────────────────────────────── */
+.log-panel {
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: height 0.2s ease;
+}
+.log-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  border-bottom: 1px solid transparent;
+}
+.log-bar:hover { background: var(--hover-bg); }
+.log-bar.open { border-bottom-color: var(--border); }
+.log-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+  display: inline-block;
+  width: 12px;
+}
+.log-bar.open .log-chevron { transform: rotate(90deg); }
+.log-bar-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.log-count {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-left: auto;
+}
+.log-clear {
+  font-size: 10px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.log-clear:hover { background: var(--bg-tertiary); color: var(--text-secondary); }
+.log-body {
+  overflow-y: auto;
+  padding: 4px 0;
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.log-entry {
+  display: flex;
+  gap: 6px;
+  padding: 2px 12px;
+  align-items: flex-start;
+}
+.log-entry:hover { background: var(--hover-bg); }
+.log-ts {
+  color: var(--text-dim);
+  flex-shrink: 0;
+  font-size: 10px;
+  min-width: 65px;
+}
+.log-level {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  min-width: 50px;
+  padding: 0 4px;
+  border-radius: 3px;
+  text-align: center;
+}
+.log-level.info { color: var(--accent); background: var(--accent-bg); }
+.log-level.success { color: var(--green); background: #3fb95022; }
+.log-level.warn { color: var(--yellow); background: #d2992222; }
+.log-level.error { color: var(--red); background: #f8514922; }
+.log-source {
+  color: var(--text-dim);
+  flex-shrink: 0;
+  font-size: 10px;
+  min-width: 80px;
+}
+.log-msg {
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+.log-empty {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 16px;
+  font-size: 11px;
+}
 </style>
 </head>
 <body>
@@ -715,6 +1031,17 @@ a:hover { text-decoration: underline; }
         <button class="detail-close" onclick="closeDetail()">&times;</button>
       </div>
       <div class="detail-body" id="detail-body"></div>
+    </div>
+
+    <!-- Log Panel -->
+    <div class="log-panel" id="log-panel" style="height:28px;">
+      <div class="log-bar" id="log-bar" onclick="toggleLogPanel()">
+        <span class="log-chevron">▶</span>
+        <span class="log-bar-label">Logs</span>
+        <span class="log-count" id="log-count">0</span>
+        <span class="log-clear" onclick="event.stopPropagation();clearLogs()">Clear</span>
+      </div>
+      <div class="log-body" id="log-body" style="display:none;"></div>
     </div>
   </main>
 </div>
@@ -931,8 +1258,9 @@ let simulations = {};
 
 function initTabs() {
   tabs.length = 0;
+  const clusters = { id: 'clusters', label: 'Clusters', type: 'clusters', data: null };
   const overview = { id: 'overview', label: 'Overview', type: 'overview', data: null };
-  tabs.push(overview);
+  tabs.push(clusters, overview);
   renderTabBar();
   switchTab('overview');
 }
@@ -945,7 +1273,7 @@ function renderTabBar() {
     el.className = 'graph-tab' + (tab.id === activeTabId ? ' active' : '');
     el.textContent = tab.label;
     el.onclick = () => switchTab(tab.id);
-    if (tab.id !== 'overview') {
+    if (tab.id !== 'overview' && tab.id !== 'clusters') {
       const close = document.createElement('span');
       close.className = 'tab-close';
       close.textContent = '\u00d7';
@@ -955,7 +1283,7 @@ function renderTabBar() {
     bar.appendChild(el);
   }
   // View toggle for subgraph tabs
-  if (activeTabId !== 'overview') {
+  if (activeTabId !== 'overview' && activeTabId !== 'clusters') {
     const spacer = document.createElement('div');
     spacer.style.flex = '1';
     bar.appendChild(spacer);
@@ -980,7 +1308,7 @@ function switchTab(tabId) {
 }
 
 function closeTab(tabId) {
-  if (tabId === 'overview') return;
+  if (tabId === 'overview' || tabId === 'clusters') return;
   const idx = tabs.findIndex(t => t.id === tabId);
   if (idx === -1) return;
   tabs.splice(idx, 1);
@@ -1037,11 +1365,19 @@ function updateTabProgress(tabId, msg) {
 
 function renderActiveGraph() {
   const viewport = document.getElementById('graph-viewport');
-  // Clear everything
+  const legend = document.getElementById('legend');
   viewport.innerHTML = '';
+  viewport.style.overflow = '';
 
   const tab = tabs.find(t => t.id === activeTabId);
   if (!tab) return;
+
+  if (tab.type === 'clusters') {
+    if (legend) legend.style.display = 'none';
+    renderClustersView();
+    return;
+  }
+  if (legend) legend.style.display = '';
 
   if (tab.loading) {
     const svg = d3.select(viewport).append('svg')
@@ -1438,7 +1774,7 @@ function renderSGOverview(data, viewport, w, h) {
 }
 
 function renderSGIntent(data, viewport, w, h) {
-  const graphH = Math.floor(h * 0.55);
+  let graphH = Math.floor(h * 0.55);
   const panelH = h - graphH;
   const conv = data.conversation || {};
   const groups = data.message_groups || {};
@@ -1497,7 +1833,7 @@ function renderSGIntent(data, viewport, w, h) {
   const bodyContainer = d3.select(viewport).append('div')
     .style('display','flex').style('flex-direction','column').style('flex','1').style('overflow','hidden');
 
-  const graphH = Math.floor(h * 0.5);
+  graphH = Math.floor(h * 0.5);
   const svg = bodyContainer.append('svg').attr('width', w).attr('height', graphH).style('display', 'block').style('flex-shrink','0');
   const g = svg.append('g');
   const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', (ev) => g.attr('transform', ev.transform));
@@ -1980,10 +2316,6 @@ function showTooltip(event, d) {
     .style('top', (event.pageY - 10) + 'px');
 }
 
-function hideTooltip() {
-  d3.selectAll('.tooltip').remove();
-}
-
 // ── Detail Panel ──────────────────────────────────────────────────────────
 function selectConversation(convId) {
   selectedConvId = convId;
@@ -2161,8 +2493,432 @@ function esc(s) {
   return d.innerHTML;
 }
 
+// ── Log Panel ─────────────────────────────────────────────────────────────
+let logOpen = false;
+let logLastSeq = 0;
+let logPollTimer = null;
+
+function toggleLogPanel() {
+  logOpen = !logOpen;
+  var bar = document.getElementById('log-bar');
+  var body = document.getElementById('log-body');
+  var panel = document.getElementById('log-panel');
+  if (logOpen) {
+    bar.classList.add('open');
+    body.style.display = '';
+    panel.style.height = '220px';
+    fetchLogs();
+    logPollTimer = setInterval(fetchLogs, 2000);
+  } else {
+    bar.classList.remove('open');
+    body.style.display = 'none';
+    panel.style.height = '28px';
+    if (logPollTimer) { clearInterval(logPollTimer); logPollTimer = null; }
+  }
+}
+
+function fetchLogs() {
+  fetch('/api/logs?since=' + logLastSeq).then(function(r) { return r.json(); }).then(function(entries) {
+    if (!entries || !entries.length) return;
+    var body = document.getElementById('log-body');
+    var wasAtBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 30;
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      logLastSeq = Math.max(logLastSeq, e.seq);
+      var div = document.createElement('div');
+      div.className = 'log-entry';
+      var ts = new Date(e.ts * 1000);
+      var tstr = ts.getHours().toString().padStart(2,'0') + ':' + ts.getMinutes().toString().padStart(2,'0') + ':' + ts.getSeconds().toString().padStart(2,'0');
+      div.innerHTML = '<span class="log-ts">' + tstr + '</span>' +
+        '<span class="log-level ' + e.level + '">' + e.level + '</span>' +
+        (e.source ? '<span class="log-source">' + esc(e.source) + '</span>' : '') +
+        '<span class="log-msg">' + esc(e.msg) + '</span>';
+      body.appendChild(div);
+    }
+    var countEl = document.getElementById('log-count');
+    countEl.textContent = body.children.length;
+    if (wasAtBottom) body.scrollTop = body.scrollHeight;
+  }).catch(function() {});
+}
+
+function clearLogs() {
+  var body = document.getElementById('log-body');
+  body.innerHTML = '';
+  document.getElementById('log-count').textContent = '0';
+}
+
+// ── Cross-conversation Clusters ───────────────────────────────────────────
+let clusterData = null;
+let clusterExpandedId = null;
+let clusterSearchTerm = '';
+const CLUSTER_COLORS = [
+  '#58a6ff','#3fb950','#d29922','#f85149','#bc8cff',
+  '#f0883e','#79c0ff','#56d364','#e3b341','#ff7b72',
+  '#d2a8ff','#ffa657','#a5d6ff','#7ee787','#f0e68c',
+  '#ff9bce','#89dceb','#a6e3a1','#f9e2af','#cba6f7',
+];
+function clusterColor(i) { return CLUSTER_COLORS[i % CLUSTER_COLORS.length]; }
+
+function loadClusters() {
+  fetch('/api/clusters').then(function(r) { return r.json(); }).then(function(d) {
+    clusterData = d;
+    renderClustersView();
+  }).catch(function() {
+    clusterData = { clusters: [], metadata: {} };
+    renderClustersView();
+  });
+}
+
+function buildClusters() {
+  var btn = document.querySelector('.cluster-empty-build');
+  if (btn) { btn.textContent = 'Building...'; btn.disabled = true; }
+  fetch('/api/clusters/build', { method: 'POST' }).then(function(r) {
+    return r.json();
+  }).then(function(d) {
+    if (d.status === 'building' || d.status === 'already_building') {
+      pollClusterBuild();
+    } else {
+      if (btn) { btn.textContent = 'Build Cross-Conversation Clusters'; btn.disabled = false; }
+    }
+  }).catch(function(e) {
+    console.error('Cluster build failed:', e);
+    if (btn) { btn.textContent = 'Build Failed — Retry'; btn.disabled = false; }
+  });
+}
+
+function pollClusterBuild() {
+  var attempts = 0;
+  var poll = setInterval(function() {
+    attempts++;
+    fetch('/api/clusters/build/status').then(function(r) { return r.json(); }).then(function(d) {
+      if (!d.building) {
+        clearInterval(poll);
+        loadClusters();
+      }
+    }).catch(function() {});
+    if (attempts > 240) { clearInterval(poll); loadClusters(); }
+  }, 3000);
+}
+
+function renderClustersView() {
+  const viewport = document.getElementById('graph-viewport');
+  viewport.innerHTML = '';
+  viewport.style.overflow = 'auto';
+
+  if (!clusterData) {
+    loadClusters();
+    var loading = document.createElement('div');
+    loading.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);';
+    loading.textContent = 'Loading clusters...';
+    viewport.appendChild(loading);
+    return;
+  }
+
+  if (!clusterData.clusters || clusterData.clusters.length === 0) {
+    var empty = document.createElement('div');
+    empty.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;color:var(--text-muted);';
+    empty.innerHTML = '<div style="font-size:40px;">⬡</div>' +
+      '<div style="font-size:14px;">No clusters built yet</div>' +
+      '<button class="btn btn-primary cluster-empty-build" onclick="buildClusters()" style="font-size:12px;">Build Cross-Conversation Clusters</button>' +
+      '<div style="font-size:11px;max-width:400px;text-align:center;line-height:1.5;">Embeds all Q&A pairs across conversations, clusters similar queries, and finds related patterns.</div>';
+    viewport.appendChild(empty);
+    return;
+  }
+
+  if (clusterExpandedId !== null) {
+    renderClusterExpanded(viewport);
+    return;
+  }
+
+  renderClusterGrid(viewport);
+}
+
+function renderClusterGrid(viewport) {
+  var meta = clusterData.metadata || {};
+  var clusters = clusterData.clusters || [];
+
+  var toolbar = document.createElement('div');
+  toolbar.className = 'cluster-build-bar';
+  toolbar.innerHTML = '<button class="btn" onclick="buildClusters()" style="font-size:11px;padding:3px 8px;">↻ Rebuild</button>' +
+    '<span class="cluster-status">' + meta.total_clusters + ' clusters · ' + meta.total_pairs + ' pairs · ' + meta.total_conversations + ' conversations · ' + meta.build_time_s + 's</span>';
+  viewport.appendChild(toolbar);
+
+  var searchDiv = document.createElement('div');
+  searchDiv.className = 'cluster-search';
+  var searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.placeholder = 'Search across all Q&A pairs...';
+  searchInput.value = clusterSearchTerm;
+  searchInput.addEventListener('input', function() {
+    clusterSearchTerm = this.value;
+    if (clusterSearchTerm.length > 2) {
+      fetch('/api/clusters/search?q=' + encodeURIComponent(clusterSearchTerm) + '&top_k=50')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { renderClusterSearchResults(viewport, d.results || []); });
+    } else {
+      renderClusterGrid_main(viewport);
+    }
+  });
+  searchDiv.appendChild(searchInput);
+  viewport.appendChild(searchDiv);
+
+  renderClusterGrid_main(viewport);
+}
+
+function renderClusterGrid_main(viewport) {
+  var existing = viewport.querySelector('.cluster-grid');
+  if (existing) existing.remove();
+
+  var clusters = clusterData.clusters || [];
+  var grid = document.createElement('div');
+  grid.className = 'cluster-grid';
+
+  for (var ci = 0; ci < clusters.length; ci++) {
+    var cl = clusters[ci];
+    var col = clusterColor(ci);
+    var card = document.createElement('div');
+    card.className = 'cluster-card';
+    card.style.borderLeft = '3px solid ' + col;
+    card.onclick = (function(c) { return function() { clusterExpandedId = c.id; renderClustersView(); }; })(cl);
+
+    var header = document.createElement('div');
+    header.className = 'cluster-card-header';
+    header.innerHTML = '<span class="cluster-color-dot" style="background:' + col + '"></span>' +
+      '<span class="cluster-card-label">' + esc(cl.label) + '</span>' +
+      '<span class="cluster-count-badge" style="background:' + col + '">' + cl.size + '</span>';
+    card.appendChild(header);
+
+    var meta2 = document.createElement('div');
+    meta2.className = 'cluster-card-meta';
+    meta2.innerHTML = '<span>' + cl.conversation_count + ' conversations</span>';
+    card.appendChild(meta2);
+
+    var queries = document.createElement('div');
+    queries.className = 'cluster-card-queries';
+    var items = cl.items || [];
+    for (var qi = 0; qi < Math.min(3, items.length); qi++) {
+      var qDiv = document.createElement('div');
+      qDiv.className = 'cluster-card-query';
+      qDiv.textContent = items[qi].query || '';
+      queries.appendChild(qDiv);
+    }
+    card.appendChild(queries);
+
+    var convTags = document.createElement('div');
+    convTags.className = 'cluster-card-conv-tags';
+    var convs = cl.conversations || [];
+    for (var ti = 0; ti < Math.min(4, convs.length); ti++) {
+      var tag = document.createElement('span');
+      tag.className = 'cluster-conv-tag';
+      tag.textContent = convs[ti];
+      convTags.appendChild(tag);
+    }
+    if (convs.length > 4) {
+      var more = document.createElement('span');
+      more.className = 'cluster-conv-tag';
+      more.textContent = '+' + (convs.length - 4);
+      convTags.appendChild(more);
+    }
+    card.appendChild(convTags);
+
+    grid.appendChild(card);
+  }
+
+  viewport.appendChild(grid);
+}
+
+function renderClusterSearchResults(viewport, results) {
+  var existing = viewport.querySelector('.cluster-grid');
+  if (existing) existing.remove();
+
+  var list = document.createElement('div');
+  list.style.cssText = 'padding:12px 16px;overflow-y:auto;flex:1;';
+
+  if (results.length === 0) {
+    list.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px;">No results found</div>';
+    viewport.appendChild(list);
+    return;
+  }
+
+  for (var ri = 0; ri < results.length; ri++) {
+    var r = results[ri];
+    var pair = document.createElement('div');
+    pair.className = 'cluster-pair';
+    pair.innerHTML = '<div class="cluster-pair-query">' + esc(r.query || '') + '</div>' +
+      '<div class="cluster-pair-answer">' + esc((r.answer || '').slice(0, 200)) + '</div>' +
+      '<div class="cluster-pair-meta">' +
+        '<span class="cluster-pair-conv" onclick="event.stopPropagation();openConversationTab(\'' + r.conv_id + '\')">' + esc(r.conv_title || '') + '</span>' +
+        '<span class="cluster-pair-model">' + esc(r.model || '') + '</span>' +
+        '<span class="cluster-pair-score">score: ' + (r.score || 0).toFixed(3) + '</span>' +
+        '<span class="filter-tag" style="font-size:9px;padding:1px 5px;background:' + (function() { var ci2 = parseInt((r.cluster_id||'').replace('cluster_','')); return clusterColor(ci2); })() + '22;color:' + (function() { var ci2 = parseInt((r.cluster_id||'').replace('cluster_','')); return clusterColor(ci2); })() + '">' + esc(r.cluster_label || '') + '</span>' +
+      '</div>';
+    list.appendChild(pair);
+  }
+  viewport.appendChild(list);
+}
+
+function renderClusterExpanded(viewport) {
+  var clusters = clusterData.clusters || [];
+  var cl = null;
+  for (var i = 0; i < clusters.length; i++) {
+    if (clusters[i].id === clusterExpandedId) { cl = clusters[i]; break; }
+  }
+  if (!cl) { clusterExpandedId = null; renderClustersView(); return; }
+
+  var ci = clusters.indexOf(cl);
+  var col = clusterColor(ci);
+
+  var header = document.createElement('div');
+  header.className = 'cluster-expanded-header';
+  header.innerHTML = '<span class="cluster-back" onclick="clusterExpandedId=null;renderClustersView();">&larr; All Clusters</span>' +
+    '<span class="cluster-color-dot" style="background:' + col + ';width:12px;height:12px;"></span>' +
+    '<span class="cluster-expanded-label">' + esc(cl.label) + '</span>' +
+    '<span class="cluster-expanded-meta">' + cl.size + ' Q&A pairs from ' + cl.conversation_count + ' conversations</span>';
+  viewport.appendChild(header);
+
+  var graphDiv = document.createElement('div');
+  graphDiv.className = 'cluster-graph-container';
+  viewport.appendChild(graphDiv);
+
+  setTimeout(function() { renderClusterMiniGraph(graphDiv, cl, col); }, 50);
+
+  var pairsContainer = document.createElement('div');
+  pairsContainer.style.cssText = 'overflow-y:auto;flex:1;padding:0 16px 16px;';
+
+  var items = cl.items || [];
+  for (var pi = 0; pi < items.length; pi++) {
+    var item = items[pi];
+    var pair = document.createElement('div');
+    pair.className = 'cluster-pair';
+    var answerFull = (item.answer || '').trim();
+    var hasAnswer = answerFull.length > 0;
+    var answerShort = answerFull.length > 250 ? answerFull.slice(0, 250) + '...' : answerFull;
+
+    pair.innerHTML = '<div class="cluster-pair-query">' + esc(item.query || '') + '</div>' +
+      (hasAnswer ?
+        '<div class="cluster-pair-answer" style="max-height:4.5em;">' + esc(answerFull) + '</div>' +
+        '<div class="cluster-pair-fade">\u25BC expand answer</div>'
+        : '') +
+      '<div class="cluster-pair-meta">' +
+        '<span class="cluster-pair-conv" onclick="event.stopPropagation();openConversationTab(\'' + item.conv_id + '\')">' + esc(item.conv_title || '') + '</span>' +
+        '<span class="cluster-pair-model">' + esc(item.model || '') + '</span>' +
+        '<div class="cluster-pair-topics">' +
+          (item.topics || []).slice(0, 2).map(function(t) { return '<span class="sg-topic-tag">' + esc(t) + '</span>'; }).join('') +
+        '</div>' +
+      '</div>';
+
+    let ansEl = pair.querySelector('.cluster-pair-answer');
+    let fadeEl = pair.querySelector('.cluster-pair-fade');
+    if (ansEl && fadeEl) {
+      function toggleAns() {
+        var expanded = ansEl.style.maxHeight === 'none';
+        ansEl.style.maxHeight = expanded ? '4.5em' : 'none';
+        fadeEl.textContent = expanded ? '\u25BC expand answer' : '\u25B2 collapse';
+      }
+      fadeEl.addEventListener('click', function(ev) { ev.stopPropagation(); toggleAns(); });
+      ansEl.addEventListener('click', function(ev) { ev.stopPropagation(); toggleAns(); });
+    }
+    pairsContainer.appendChild(pair);
+  }
+  viewport.appendChild(pairsContainer);
+}
+
+function renderClusterMiniGraph(container, cluster, color) {
+  var w = container.clientWidth || 600;
+  var h = container.clientHeight || 340;
+  var svg = d3.select(container).append('svg').attr('width', w).attr('height', h);
+  var g = svg.append('g');
+  var zoom = d3.zoom().scaleExtent([0.3, 3]).on('zoom', function(ev) { g.attr('transform', ev.transform); });
+  svg.call(zoom);
+
+  var items = cluster.items || [];
+  var nodes = [];
+  var links = [];
+
+  var centerNode = { id: 'center', label: cluster.label, r: 22, nodeType: 'cluster_center', _fixed: true };
+  nodes.push(centerNode);
+
+  var maxShow = Math.min(items.length, 40);
+  var sample = items.slice(0, maxShow);
+  for (var i = 0; i < sample.length; i++) {
+    var it = sample[i];
+    nodes.push({
+      id: 'q_' + i,
+      label: (it.query || '').slice(0, 35),
+      r: 8,
+      nodeType: 'query',
+      _item: it,
+    });
+    links.push({ source: 'center', target: 'q_' + i });
+  }
+
+  var convNodes = {};
+  for (var j = 0; j < sample.length; j++) {
+    var cid = sample[j].conv_id;
+    if (!convNodes[cid]) {
+      convNodes[cid] = { id: 'conv_' + cid, label: (sample[j].conv_title || '').slice(0, 25), r: 14, nodeType: 'conversation' };
+      nodes.push(convNodes[cid]);
+    }
+    links.push({ source: 'conv_' + cid, target: 'q_' + j });
+  }
+
+  var sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(function(d) { return d.id; }).distance(60))
+    .force('charge', d3.forceManyBody().strength(-120))
+    .force('center', d3.forceCenter(w / 2, h / 2))
+    .force('collision', d3.forceCollide().radius(function(d) { return d.r + 6; }));
+
+  g.append('g').selectAll('line').data(links).join('line')
+    .attr('stroke', 'var(--border)').attr('stroke-width', 1).attr('stroke-opacity', 0.3);
+
+  g.append('g').selectAll('circle').data(nodes).join('circle')
+    .attr('r', function(d) { return d.r; })
+    .attr('fill', function(d) {
+      if (d.nodeType === 'cluster_center') return color;
+      if (d.nodeType === 'conversation') return 'var(--accent)';
+      return 'var(--text-muted)';
+    })
+    .attr('stroke', 'var(--bg-primary)').attr('stroke-width', 1.5)
+    .style('cursor', 'pointer')
+    .on('click', function(ev, d) {
+      if (d._item) openConversationTab(d._item.conv_id);
+    })
+    .on('mouseenter', function(ev, d) {
+      var tip = d3.select('body').append('div').attr('class', 'tooltip');
+      var html = '<h3>' + esc(d.label) + '</h3>';
+      if (d._item) html += '<p>' + esc((d._item.query || '').slice(0, 100)) + '</p>';
+      tip.html(html).style('left', (ev.pageX + 12) + 'px').style('top', (ev.pageY - 10) + 'px');
+    })
+    .on('mouseleave', function() { d3.selectAll('.tooltip').remove(); })
+    .call(d3.drag()
+      .on('start', function(ev, d) { if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', function(ev, d) { d.fx = ev.x; d.fy = ev.y; })
+      .on('end', function(ev, d) { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+  g.append('g').selectAll('text').data(nodes).join('text')
+    .text(function(d) { return (d.label || '').length > 18 ? d.label.slice(0, 16) + '..' : d.label; })
+    .attr('font-size', function(d) { return d.nodeType === 'cluster_center' ? 10 : Math.max(7, d.r * 0.5); })
+    .attr('fill', 'var(--text-muted)')
+    .attr('text-anchor', 'middle')
+    .attr('dy', function(d) { return d.r + 11; });
+
+  sim.on('tick', function() {
+    g.selectAll('line')
+      .attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; })
+      .attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
+    g.selectAll('circle').attr('cx', function(d) { return d.x; }).attr('cy', function(d) { return d.y; });
+    g.selectAll('text').attr('x', function(d) { return d.x; }).attr('y', function(d) { return d.y; });
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────
 loadData();
+fetch('/api/logs').then(function(r) { return r.json(); }).then(function(entries) {
+  if (entries && entries.length) {
+    logLastSeq = entries[entries.length - 1].seq;
+    document.getElementById('log-count').textContent = entries.length;
+  }
+}).catch(function() {});
 </script>
 </body>
 </html>

@@ -130,13 +130,49 @@ def get_embeddings(texts: list[str], cache: EmbeddingCache | None = None) -> lis
 
 # ── Clustering ─────────────────────────────────────────────────────────────
 
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    np = None  # type: ignore
+    HAS_NUMPY = False
+
+
 def cluster_embeddings(embeds: list[list[float]]) -> list[list[int]]:
-    """Two-pass clustering returning list of index groups."""
+    """Two-pass clustering returning list of index groups.
+
+    For small datasets (≤200) uses agglomerative merging.
+    For larger datasets uses k-means primary.
+    If numpy is available, uses vectorized operations.
+    """
     n = len(embeds)
     if n == 0:
         return []
+    if n == 1:
+        return [[0]]
 
-    # Pass 1: agglomerative (merge nearest pairs until threshold)
+    if n <= 200:
+        return _cluster_agglomerative(embeds, n)
+
+    if HAS_NUMPY:
+        mat = np.array(embeds, dtype=np.float32)
+        return _cluster_kmeans_np(mat, n)
+    return _cluster_kmeans_py(embeds, n)
+
+
+def _cosine_sim_matrix(a, b):
+    """Cosine similarity matrix — numpy rows × numpy rows."""
+    a_norm = a / (np.linalg.norm(a, axis=1, keepdims=True) + 1e-10)
+    if b.ndim == 1:
+        return a_norm @ (b / (np.linalg.norm(b) + 1e-10))
+    b_norm = b / (np.linalg.norm(b, axis=1, keepdims=True) + 1e-10)
+    return a_norm @ b_norm.T
+
+
+# ── Pure-Python path ──────────────────────────────────────────────────────
+
+def _cluster_agglomerative(embeds: list[list[float]], n: int) -> list[list[int]]:
+    """Original agglomerative — fine for small n."""
     clusters = [[i] for i in range(n)]
     centroids = [list(e) for e in embeds]
     threshold = CLUSTER_SIM
@@ -170,43 +206,163 @@ def cluster_embeddings(embeds: list[list[float]]) -> list[list[int]]:
 
     if not clusters:
         return [[i for i in range(n)]]
+    return _kmeans_refine_py(embeds, n, clusters, centroids, iters=3)
 
-    # Pass 2: k-means refinement (3 iterations)
-    for _ in range(3):
-        new_clusters: list[list[int]] = [[] for _ in range(len(clusters))]
-        new_centroids = [[0.0] * len(embeds[0]) for _ in range(len(clusters))]
+
+def _cluster_kmeans_py(embeds: list[list[float]], n: int) -> list[list[int]]:
+    """K-means primary — pure-Python fallback for when numpy is unavailable."""
+    import math, random
+    dim = len(embeds[0])
+    k = max(8, min(80, int(math.sqrt(n))))
+
+    centroids = [list(embeds[random.randint(0, n - 1)]) for _ in range(k)]
+
+    for _ in range(8):
+        clusters: list[list[int]] = [[] for _ in range(k)]
         for idx in range(n):
-            best_c = max(range(len(centroids)), key=lambda ci: _cosine_sim(embeds[idx], centroids[ci]))
-            new_clusters[best_c].append(idx)
-            for k in range(len(embeds[0])):
-                new_centroids[best_c][k] += embeds[idx][k]
-        for ci in range(len(new_centroids)):
-            if new_clusters[ci]:
-                for k in range(len(embeds[0])):
-                    new_centroids[ci][k] /= len(new_clusters[ci])
-        clusters = [c for c in new_clusters if c]
-        centroids = [c for c, cl in zip(new_centroids, new_clusters) if cl]
+            best_c = 0
+            best_sim = -1.0
+            for ci in range(k):
+                sim = _cosine_sim(embeds[idx], centroids[ci])
+                if sim > best_sim:
+                    best_sim = sim
+                    best_c = ci
+            clusters[best_c].append(idx)
+        for ci in range(k):
+            if clusters[ci]:
+                centroids[ci] = [0.0] * dim
+                for idx in clusters[ci]:
+                    for d in range(dim):
+                        centroids[ci][d] += embeds[idx][d]
+                sz = len(clusters[ci])
+                for d in range(dim):
+                    centroids[ci][d] /= sz
 
-    # Merge tiny clusters
-    min_size = max(2, int(n * MIN_CLUSTER_PCT))
+    pairs = [(cl, ce) for cl, ce in zip(clusters, centroids) if cl]
+    clusters = [p[0] for p in pairs]
+    centroids = [p[1] for p in pairs]
+
+    min_size = max(3, int(n * MIN_CLUSTER_PCT))
     large: list[list[int]] = []
     large_centroids: list[list[float]] = []
-    for cl, cent in zip(clusters, centroids):
+    small: list[tuple[list[int], list[float]]] = []
+
+    for cl, ce in zip(clusters, centroids):
         if len(cl) >= min_size:
             large.append(cl)
-            large_centroids.append(cent)
+            large_centroids.append(ce)
+        elif cl:
+            small.append((cl, ce))
 
-    for cl, cent in zip(clusters, centroids):
-        if len(cl) < min_size and large:
-            best = max(range(len(large)), key=lambda li: _cosine_sim(cent, large_centroids[li]))
+    for cl, ce in small:
+        if large:
+            best = max(range(len(large)), key=lambda li: _cosine_sim(ce, large_centroids[li]))
             large[best].extend(cl)
             m = len(large[best])
             large_centroids[best] = [
-                (large_centroids[best][k] * (m - len(cl)) + cent[k] * len(cl)) / m
-                for k in range(len(embeds[0]))
+                (large_centroids[best][d] * (m - len(cl)) + ce[d] * len(cl)) / m
+                for d in range(dim)
             ]
 
-    return large if large else [[i for i in range(n)]]
+    result = large if large else [list(range(n))]
+    return _kmeans_refine_py(embeds, n, result, large_centroids if large else centroids, iters=3)
+
+
+def _kmeans_refine_py(embeds, n, clusters, centroids, iters=3):
+    """K-means refinement — pure Python."""
+    dim = len(embeds[0])
+    for _ in range(iters):
+        new_clusters: list[list[int]] = [[] for _ in range(len(clusters))]
+        new_centroids = [[0.0] * dim for _ in range(len(clusters))]
+        for idx in range(n):
+            best_c = max(range(len(centroids)), key=lambda ci: _cosine_sim(embeds[idx], centroids[ci]))
+            new_clusters[best_c].append(idx)
+            for d in range(dim):
+                new_centroids[best_c][d] += embeds[idx][d]
+        for ci in range(len(new_centroids)):
+            if new_clusters[ci]:
+                sz = len(new_clusters[ci])
+                for d in range(dim):
+                    new_centroids[ci][d] /= sz
+        clusters = [c for c in new_clusters if c]
+        centroids = [c for c, cl in zip(new_centroids, new_clusters) if cl]
+    return clusters
+
+
+# ── NumPy-accelerated path ────────────────────────────────────────────────
+
+def _cluster_kmeans_np(mat: np.ndarray, n: int) -> list[list[int]]:
+    """K-means primary — numpy-accelerated for large n."""
+    import random
+    dim = mat.shape[1]
+    k = max(8, min(80, int(n ** 0.5)))
+
+    # K-means++ init
+    centroids = np.zeros((k, dim), dtype=np.float32)
+    centroids[0] = mat[random.randint(0, n - 1)]
+    for ci in range(1, k):
+        sims = _cosine_sim_matrix(mat, centroids[:ci])
+        max_sims = sims.max(axis=1)
+        dists = np.maximum(1.0 - max_sims, 0.0) + 1e-10
+        probs = dists / dists.sum()
+        idx = int(np.random.choice(n, p=probs))
+        centroids[ci] = mat[idx]
+
+    # 8 k-means iterations
+    labels = np.zeros(n, dtype=np.int32)
+    for _ in range(8):
+        labels = _cosine_sim_matrix(mat, centroids).argmax(axis=1)
+        for ci in range(k):
+            mask = labels == ci
+            if mask.any():
+                centroids[ci] = mat[mask].mean(axis=0)
+
+    # Build cluster lists
+    clusters: list[list[int]] = [[] for _ in range(k)]
+    for idx in range(n):
+        clusters[labels[idx]].append(idx)
+
+    # Drop empty, merge small
+    min_size = max(3, int(n * MIN_CLUSTER_PCT))
+    large: list[list[int]] = []
+    large_centroids: list[np.ndarray] = []
+
+    for cl in clusters:
+        if len(cl) >= min_size:
+            large.append(cl)
+            large_centroids.append(centroids[labels[cl[0]]].copy())
+        elif cl:
+            # Absorb into nearest large
+            if large:
+                sims = _cosine_sim_matrix(centroids[labels[cl[0]]].reshape(1, -1), np.array(large_centroids))[0]
+                best = int(sims.argmax())
+                large[best].extend(cl)
+                m = len(large[best])
+                large_centroids[best] = (large_centroids[best] * (m - len(cl)) + centroids[labels[cl[0]]] * len(cl)) / m
+
+    result = large if large else [list(range(n))]
+    final_centroids = np.array(large_centroids) if large else centroids
+    return _kmeans_refine_np(mat, n, result, final_centroids, iters=3)
+
+
+def _kmeans_refine_np(mat: np.ndarray, n: int, clusters: list[list[int]], centroids: np.ndarray, iters=3):
+    """K-means refinement — numpy."""
+    if centroids.ndim == 1:
+        centroids = centroids.reshape(1, -1)
+
+    for _ in range(iters):
+        labels = _cosine_sim_matrix(mat, centroids).argmax(axis=1)
+        new_clusters: list[list[int]] = [[] for _ in range(len(centroids))]
+        for idx in range(n):
+            new_clusters[labels[idx]].append(idx)
+        new_centroids = np.zeros_like(centroids)
+        for ci in range(len(centroids)):
+            if new_clusters[ci]:
+                new_centroids[ci] = mat[new_clusters[ci]].mean(axis=0)
+        keep = [ci for ci in range(len(new_centroids)) if new_clusters[ci]]
+        clusters = [new_clusters[ci] for ci in keep]
+        centroids = new_centroids[keep]
+    return clusters
 
 
 # ── LLM Labeling ───────────────────────────────────────────────────────────

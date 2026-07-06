@@ -12,6 +12,7 @@ import re
 import sys
 import time
 import threading
+import collections
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,34 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 AVAILABLE_MODELS = ["llama3.2:3b", "qwen3.6:35b-mlx"]
 _current_model: str = OLLAMA_MODEL
 MAX_WORKERS = 6
+
+# ── Logging ─────────────────────────────────────────────────────────────────
+
+_log_lock = threading.Lock()
+_log_buffer: collections.deque = collections.deque(maxlen=500)
+_log_seq: int = 0
+
+
+def log(msg: str, level: str = "info", source: str = "") -> None:
+    """Append a log entry.  Levels: info, success, warn, error."""
+    global _log_seq
+    with _log_lock:
+        _log_seq += 1
+        _log_buffer.append({
+            "seq": _log_seq,
+            "ts": time.time(),
+            "level": level,
+            "source": source,
+            "msg": msg,
+        })
+
+
+def get_logs(since: int = 0) -> list[dict]:
+    with _log_lock:
+        if since:
+            return [e for e in _log_buffer if e["seq"] > since]
+        return list(_log_buffer)
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -357,6 +386,12 @@ _graph_data: dict | None = None
 _build_in_progress = False
 
 
+@app.route("/api/logs")
+def api_logs():
+    since = int(request.args.get("since", "0"))
+    return jsonify(get_logs(since))
+
+
 @app.route("/api/model", methods=["GET", "POST"])
 def api_model():
     """Get or set the active Ollama model."""
@@ -598,12 +633,15 @@ def api_import_json():
 
         def rebuild():
             global _graph_data, _build_in_progress
+            log("Graph rebuild started after import", "info", "graph")
             try:
                 _graph_data = build_knowledge_graph(load_chat_data())
+                log("Graph rebuild complete", "success", "graph")
             finally:
                 _build_in_progress = False
 
         conv_count = sum(1 for c in (data.get("data", []) if isinstance(data, dict) else data))
+        log(f"Imported {conv_count} conversations from {out_path.name}", "success", "import")
         threading.Thread(target=rebuild, daemon=True).start()
 
         return jsonify({
@@ -677,10 +715,16 @@ def api_ks_build():
     from knowledge_store import build_knowledge_store
     from intent_engine import get_embeddings
 
+    log("Knowledge store build started", "info", "knowledge-store")
     convs = load_chat_data()
     cache = build_cache()
     stats = build_knowledge_store(
         convs, get_user_queries_and_answers, cache, get_embeddings, _current_model
+    )
+    log(
+        f"Knowledge store complete: {stats.get('vector_entries',0)} vectors, "
+        f"{stats.get('graph_nodes',0)} nodes in {stats.get('build_time_s',0)}s",
+        "success", "knowledge-store",
     )
     return jsonify(stats)
 
@@ -753,6 +797,78 @@ def api_ks_related():
     })
 
 
+# ── Cross-conversation Q&A Clustering ─────────────────────────────────────
+
+_clusters_building = False
+
+
+@app.route("/api/clusters/build", methods=["POST"])
+def api_clusters_build():
+    """Build cross-conversation Q&A clusters in background."""
+    global _clusters_building
+    if _clusters_building:
+        return jsonify({"status": "already_building"})
+
+    convs = load_chat_data()
+    cache = build_cache()
+
+    def build():
+        global _clusters_building
+        _clusters_building = True
+        log("Cluster build started", "info", "clusters")
+        try:
+            from cluster_store import build_cross_clusters
+            result = build_cross_clusters(
+                convs, get_user_queries_and_answers, cache, _current_model,
+                on_progress=lambda m: log(m, "info", "clusters"),
+            )
+            meta = result.get("metadata", {})
+            log(
+                f"Cluster build complete: {meta.get('total_clusters',0)} clusters, "
+                f"{meta.get('total_pairs',0)} pairs in {meta.get('build_time_s',0)}s",
+                "success", "clusters",
+            )
+        except Exception as e:
+            log(f"Cluster build error: {e}", "error", "clusters")
+            import traceback
+            traceback.print_exc()
+        finally:
+            _clusters_building = False
+
+    threading.Thread(target=build, daemon=True).start()
+    return jsonify({"status": "building"})
+
+
+@app.route("/api/clusters/build/status")
+def api_clusters_build_status():
+    return jsonify({"building": _clusters_building})
+
+
+@app.route("/api/clusters")
+def api_clusters():
+    from cluster_store import get_clusters
+    return jsonify(get_clusters())
+
+
+@app.route("/api/clusters/<cluster_id>")
+def api_cluster_detail(cluster_id: str):
+    from cluster_store import get_cluster
+    c = get_cluster(cluster_id)
+    if c:
+        return jsonify(c)
+    return jsonify({"error": "not found"}), 404
+
+
+@app.route("/api/clusters/search")
+def api_clusters_search():
+    from cluster_store import search_pairs
+    q = request.args.get("q", "")
+    top_k = int(request.args.get("top_k", "20"))
+    if not q:
+        return jsonify({"error": "Missing 'q' parameter"}), 400
+    return jsonify({"query": q, "results": search_pairs(q, top_k)})
+
+
 # ── Main ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -763,20 +879,19 @@ if __name__ == "__main__":
 
     def _startup_build():
         global _graph_data, _build_in_progress
+        log("Knowledge graph build started", "info", "graph")
         try:
             data = build_knowledge_graph(load_chat_data())
             _graph_data = data
             s = data.get("stats", {})
-            print(f"  Conversations: {s.get('conversations', 0)}")
-            print(f"  Topics: {s.get('topics', 0)}")
-            print(f"  Concepts: {s.get('concepts', 0)}")
-            print(f"  Intents: {s.get('intents', 0)}")
-            print(f"  Models: {', '.join(s.get('models', []))}")
-            print(f"  Nodes: {len(data.get('nodes', []))}")
-            print(f"  Edges: {len(data.get('links', []))}")
-            print("  Background build complete")
+            log(
+                f"Graph complete: {s.get('conversations',0)} conversations, "
+                f"{s.get('topics',0)} topics, {s.get('concepts',0)} concepts, "
+                f"{len(data.get('nodes',[]))} nodes, {len(data.get('links',[]))} edges",
+                "success", "graph",
+            )
         except Exception as e:
-            print(f"  Background build error: {e}")
+            log(f"Graph build error: {e}", "error", "graph")
             import traceback
             traceback.print_exc()
             _graph_data = {"error": str(e), "nodes": [], "links": [], "conversations": [], "stats": {}}
