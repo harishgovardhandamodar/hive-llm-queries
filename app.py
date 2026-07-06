@@ -869,6 +869,15 @@ def api_clusters_search():
     return jsonify({"query": q, "results": search_pairs(q, top_k)})
 
 
+@app.route("/api/clusters/<cluster_id>/knowledge-graph")
+def api_cluster_kg(cluster_id: str):
+    from cluster_kg import get_cluster_knowledge_graph
+    kg = get_cluster_knowledge_graph(cluster_id, request.args.get("model", "llama3.2:3b"))
+    if kg is not None:
+        return jsonify(kg)
+    return jsonify({"error": "cluster not found"}), 404
+
+
 # ── Main ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

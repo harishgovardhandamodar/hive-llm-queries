@@ -839,6 +839,37 @@ a:hover { text-decoration: underline; }
   position: relative;
 }
 .cluster-graph-container svg { width: 100%; height: 100%; }
+.cluster-kg-btn {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.cluster-kg-btn:hover { background: var(--accent); color: var(--bg-primary); }
+.cluster-kg-btn.active { background: var(--accent); color: var(--bg-primary); }
+.cluster-kg-loading {
+  display:flex;align-items:center;justify-content:center;height:100%;
+  color:var(--text-muted);font-size:13px;
+}
+.cluster-hive-tooltip {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 1000;
+  max-width: 250px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
 .cluster-count-badge {
   display: inline-flex;
   align-items: center;
@@ -2773,7 +2804,8 @@ function renderClusterExpanded(viewport) {
   header.innerHTML = '<span class="cluster-back" onclick="clusterExpandedId=null;renderClustersView();">&larr; All Clusters</span>' +
     '<span class="cluster-color-dot" style="background:' + col + ';width:12px;height:12px;"></span>' +
     '<span class="cluster-expanded-label">' + esc(cl.label) + '</span>' +
-    '<span class="cluster-expanded-meta">' + cl.size + ' Q&A pairs from ' + cl.conversation_count + ' conversations</span>';
+    '<span class="cluster-expanded-meta">' + cl.size + ' Q&A pairs from ' + cl.conversation_count + ' conversations</span>' +
+    '<button class="cluster-kg-btn" id="cluster-kg-toggle" onclick="toggleClusterKG(\'' + cl.id + '\')">\u2699 Knowledge Graph</button>';
   viewport.appendChild(header);
 
   var graphDiv = document.createElement('div');
@@ -2908,6 +2940,232 @@ function renderClusterMiniGraph(container, cluster, color) {
       .attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
     g.selectAll('circle').attr('cx', function(d) { return d.x; }).attr('cy', function(d) { return d.y; });
     g.selectAll('text').attr('x', function(d) { return d.x; }).attr('y', function(d) { return d.y; });
+  });
+}
+
+// ── Cluster Knowledge Graph (Hive Plot) ────────────────────────────────────
+var clusterKgCache = {};
+var clusterKgView = false;
+var currentClKGId = null;
+
+function toggleClusterKG(clusterId) {
+  var btn = document.getElementById('cluster-kg-toggle');
+  if (clusterKgView && currentClKGId === clusterId) {
+    clusterKgView = false;
+    currentClKGId = null;
+    btn.classList.remove('active');
+    btn.textContent = '\u2699 Knowledge Graph';
+    // Re-render mini graph
+    var cl = null;
+    for (var i = 0; i < clusterData.clusters.length; i++) {
+      if (clusterData.clusters[i].id === clusterId) { cl = clusterData.clusters[i]; break; }
+    }
+    if (cl) {
+      var container = document.querySelector('.cluster-graph-container');
+      if (container) {
+        container.innerHTML = '';
+        var col = clusterColor(clusterData.clusters.indexOf(cl));
+        renderClusterMiniGraph(container, cl, col);
+      }
+    }
+    return;
+  }
+
+  clusterKgView = true;
+  currentClKGId = clusterId;
+  btn.classList.add('active');
+  btn.textContent = '\u2699 Graph';
+
+  var container = document.querySelector('.cluster-graph-container');
+  if (!container) return;
+
+  if (clusterKgCache[clusterId]) {
+    renderClusterKG(container, clusterKgCache[clusterId]);
+    return;
+  }
+
+  container.innerHTML = '<div class="cluster-kg-loading">Loading knowledge graph...</div>';
+
+  fetch('/api/clusters/' + encodeURIComponent(clusterId) + '/knowledge-graph')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data && data.nodes && data.nodes.length > 0) {
+        clusterKgCache[clusterId] = data;
+        container.innerHTML = '';
+        renderClusterKG(container, data);
+      } else {
+        container.innerHTML = '<div class="cluster-kg-loading">No entities found for this cluster.</div>';
+      }
+    })
+    .catch(function() {
+      container.innerHTML = '<div class="cluster-kg-loading">Failed to load knowledge graph.</div>';
+    });
+}
+
+function renderClusterKG(container, data) {
+  var w = container.clientWidth || 600;
+  var h = container.clientHeight || 340;
+  var margin = 50;
+  var innerR = 30;
+  var outerR = Math.min(w, h) / 2 - margin;
+
+  // Group nodes by type
+  var typeGroups = {};
+  data.nodes.forEach(function(n) {
+    var t = n.type || 'other';
+    if (!typeGroups[t]) typeGroups[t] = [];
+    typeGroups[t].push(n);
+  });
+  var typeKeys = Object.keys(typeGroups);
+  var nTypes = typeKeys.length;
+  if (nTypes === 0) {
+    container.innerHTML = '<div class="cluster-kg-loading">No typed entities.</div>';
+    return;
+  }
+
+  // Sort nodes within each group by frequency (descending)
+  typeKeys.forEach(function(t) {
+    typeGroups[t].sort(function(a, b) { return (b.frequency || 0) - (a.frequency || 0); });
+  });
+
+  // Color mapping
+  var hiveColors = {
+    'topic': '#3fb950',
+    'intent': '#f85149',
+    'concept': '#d29922',
+    'technical_term': '#f0883e',
+    'acronym': '#a371f7',
+  };
+  function typeColor(t) { return hiveColors[t] || 'var(--text-muted)'; }
+
+  // Build node position map
+  var nodePositions = {};
+  var nodeRadius = {};
+
+  typeKeys.forEach(function(t, ti) {
+    var angle = (2 * Math.PI / nTypes) * ti - Math.PI / 2;
+    var nodes = typeGroups[t];
+    var maxFreq = nodes.length > 0 ? nodes[0].frequency || 1 : 1;
+    nodes.forEach(function(n, ni) {
+      var frac = maxFreq > 1 ? ((n.frequency || 1) / maxFreq) : (ni + 1) / nodes.length;
+      var r = innerR + frac * (outerR - innerR);
+      nodePositions[n.id] = { x: w / 2 + r * Math.cos(angle), y: h / 2 + r * Math.sin(angle), angle: angle, r: r };
+      nodeRadius[n.id] = 4 + Math.min(10, (n.frequency || 1) * 2);
+    });
+  });
+
+  // Build SVG
+  var svg = d3.select(container).append('svg').attr('width', w).attr('height', h);
+  var g = svg.append('g');
+
+  // Zoom
+  var zoom = d3.zoom().scaleExtent([0.3, 3]).on('zoom', function(ev) {
+    g.attr('transform', ev.transform);
+  });
+  svg.call(zoom);
+
+  // Draw axes
+  typeKeys.forEach(function(t, ti) {
+    var angle = (2 * Math.PI / nTypes) * ti - Math.PI / 2;
+    var x1 = w / 2 + innerR * Math.cos(angle);
+    var y1 = h / 2 + innerR * Math.sin(angle);
+    var x2 = w / 2 + outerR * Math.cos(angle);
+    var y2 = h / 2 + outerR * Math.sin(angle);
+    g.append('line')
+      .attr('x1', x1).attr('y1', y1)
+      .attr('x2', x2).attr('y2', y2)
+      .attr('stroke', typeColor(t))
+      .attr('stroke-width', 1.5)
+      .attr('stroke-opacity', 0.3);
+
+    // Axis label
+    var labelX = w / 2 + (outerR + 16) * Math.cos(angle);
+    var labelY = h / 2 + (outerR + 16) * Math.sin(angle);
+    g.append('text')
+      .attr('x', labelX).attr('y', labelY)
+      .attr('text-anchor', 'middle').attr('dy', '0.35em')
+      .attr('fill', typeColor(t)).attr('font-size', 11).attr('font-weight', 600)
+      .text(t.replace(/_/g, ' '));
+  });
+
+  // Draw edges as curved paths
+  var linkGroup = g.append('g').attr('stroke-opacity', 0.2);
+  data.links.forEach(function(edge) {
+    var src = nodePositions[edge.source];
+    var tgt = nodePositions[edge.target];
+    if (!src || !tgt) return;
+
+    // Cubic bezier with control points
+    var midAngle = (src.angle + tgt.angle) / 2;
+    var midR = (src.r + tgt.r) / 2 * 0.6;
+    var cx = w / 2 + midR * Math.cos(midAngle);
+    var cy = h / 2 + midR * Math.sin(midAngle);
+
+    linkGroup.append('path')
+      .attr('d', 'M' + src.x + ',' + src.y + ' Q' + cx + ',' + cy + ' ' + tgt.x + ',' + tgt.y)
+      .attr('stroke', 'var(--text-muted)')
+      .attr('stroke-width', Math.min(3, (edge.weight || 1) * 0.8))
+      .attr('fill', 'none');
+  });
+
+  // Draw nodes
+  var nodeGroup = g.append('g');
+  var tooltip = null;
+
+  data.nodes.forEach(function(n) {
+    var pos = nodePositions[n.id];
+    if (!pos) return;
+    var rad = nodeRadius[n.id] || 5;
+    var col = typeColor(n.type);
+
+    nodeGroup.append('circle')
+      .attr('cx', pos.x).attr('cy', pos.y).attr('r', rad)
+      .attr('fill', col).attr('stroke', 'var(--bg-primary)').attr('stroke-width', 1.5)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(ev) {
+        if (tooltip) tooltip.remove();
+        tooltip = document.createElement('div');
+        tooltip.className = 'cluster-hive-tooltip';
+        tooltip.innerHTML = '<strong>' + esc(n.label) + '</strong>' +
+          '<br><span style="color:' + col + '">' + n.type + '</span>' +
+          '<br>frequency: ' + (n.frequency || 1);
+        document.body.appendChild(tooltip);
+        var rect = tooltip.getBoundingClientRect();
+        tooltip.style.left = (ev.clientX - rect.width / 2) + 'px';
+        tooltip.style.top = (ev.clientY - rect.height - 12) + 'px';
+      })
+      .on('mousemove', function(ev) {
+        if (!tooltip) return;
+        var rect = tooltip.getBoundingClientRect();
+        tooltip.style.left = (ev.clientX - rect.width / 2) + 'px';
+        tooltip.style.top = (ev.clientY - rect.height - 12) + 'px';
+      })
+      .on('mouseleave', function() {
+        if (tooltip) { tooltip.remove(); tooltip = null; }
+      });
+
+    // Label
+    if (rad > 5) {
+      nodeGroup.append('text')
+        .attr('x', pos.x).attr('y', pos.y + rad + 10)
+        .attr('text-anchor', 'middle').attr('fill', 'var(--text-muted)')
+        .attr('font-size', 9)
+        .text(n.label.length > 16 ? n.label.slice(0, 14) + '..' : n.label);
+    }
+  });
+
+  // Legend
+  var legendG = svg.append('g').attr('transform', 'translate(10, 10)');
+  legendG.append('rect').attr('width', 120).attr('height', 20 + nTypes * 16)
+    .attr('fill', 'var(--bg-primary)').attr('fill-opacity', 0.85).attr('rx', 4);
+  legendG.append('text').attr('x', 8).attr('y', 14).attr('font-size', 10)
+    .attr('fill', 'var(--text-muted)').attr('font-weight', 600).text('Entity Types');
+  typeKeys.forEach(function(t, ti) {
+    var ly = 26 + ti * 16;
+    legendG.append('circle').attr('cx', 12).attr('cy', ly).attr('r', 4)
+      .attr('fill', typeColor(t));
+    legendG.append('text').attr('x', 22).attr('y', ly + 4).attr('font-size', 9)
+      .attr('fill', 'var(--text-muted)').text(t.replace(/_/g, ' ') + ' (' + (typeGroups[t] || []).length + ')');
   });
 }
 
