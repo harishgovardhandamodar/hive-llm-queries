@@ -759,32 +759,25 @@ let selectedConvId = null;
 let searchTerm = '';
 
 // ── Load data ────────────────────────────────────────────────────────────
-async function loadData() {
-  try {
-    var resp = await fetch('/api/graph');
-    graphData = await resp.json();
-  } catch(e) {
-    console.error('Fetch failed, retrying in 2s:', e);
-    await new Promise(r => setTimeout(r, 2000));
-    try {
-      var resp2 = await fetch('/api/graph');
-      graphData = await resp2.json();
-    } catch(e2) {
+function loadData() {
+  var p = fetch('/api/graph').then(function(r) { return r.json(); });
+  p.then(function(d) {
+    graphData = d;
+    document.getElementById('loading').style.display = 'none';
+    if (d && d.nodes) render();
+  });
+  p.catch(function() {
+    // retry once
+    fetch('/api/graph').then(function(r) { return r.json(); }).then(function(d) {
+      graphData = d;
+      document.getElementById('loading').style.display = 'none';
+      if (d && d.nodes) render();
+    }).catch(function() {
       document.getElementById('loading').innerHTML =
-        '<div style="text-align:center;color:var(--red);padding:40px;">' +
-        '<p style="font-size:13px;">Failed to connect</p>' +
-        '<button onclick="location.reload()" style="margin-top:12px;padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;">Retry</button></div>';
-      return;
-    }
-  }
-  document.getElementById('loading').style.display = 'none';
-  if (graphData && graphData.nodes) {
-    render();
-  } else {
-    document.getElementById('loading').innerHTML =
-      '<div style="text-align:center;color:var(--text-muted);padding:40px;">' +
-      '<p>Graph data not ready yet. <button onclick="location.reload()">Refresh</button></p></div>';
-  }
+        '<div style="text-align:center;color:var(--red);padding:40px;font-size:13px;">Failed to connect. ' +
+        '<button onclick="location.reload()" style="margin:12px;padding:6px 16px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;">Retry</button></div>';
+    });
+  });
 }
 
 // ── Render ────────────────────────────────────────────────────────────────
@@ -796,36 +789,35 @@ function render() {
   initTabs();
 }
 
-async function renderAnalysisModelSelector() {
-  const container = document.getElementById('analysis-model-selector');
+function renderAnalysisModelSelector() {
+  var container = document.getElementById('analysis-model-selector');
   container.innerHTML = '';
-  try {
-    const resp = await fetch('/api/model');
-    const data = await resp.json();
-    const current = data.model;
-    for (const m of data.available) {
-      const btn = document.createElement('button');
+  fetch('/api/model').then(function(r) { return r.json(); }).then(function(data) {
+    var current = data.model;
+    for (var i = 0; i < (data.available||[]).length; i++) {
+      var m = data.available[i];
+      var btn = document.createElement('button');
       btn.className = 'filter-tag' + (m === current ? ' active' : '');
-      const short = m.includes(':') ? m.split(':')[0] : m;
+      var short = m.indexOf(':') > -1 ? m.split(':')[0] : m;
       btn.textContent = short.length > 12 ? short.slice(0, 10) + '..' : short;
       btn.title = m;
-      btn.onclick = async () => {
-        const r = await fetch('/api/model', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({model: m}),
-        });
-        const result = await r.json();
-        if (result.status === 'ok') {
-          renderAnalysisModelSelector();
-          // Rebuild graph with new model
-          graphData = await (await fetch('/api/graph?force=1')).json();
-          render();
-        }
-      };
+      btn.onclick = function(mm) {
+        return function() {
+          fetch('/api/model', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({model: mm}) })
+            .then(function(r) { return r.json(); }).then(function(result) {
+              if (result.status === 'ok') {
+                renderAnalysisModelSelector();
+                fetch('/api/graph?force=1').then(function(r) { return r.json(); }).then(function(d) {
+                  graphData = d;
+                  render();
+                });
+              }
+            });
+        };
+      }(m);
       container.appendChild(btn);
     }
-  } catch (_) {}
+  }).catch(function() {});
 }
 
 function renderStats() {
@@ -1001,42 +993,31 @@ function closeTab(tabId) {
   renderActiveGraph();
 }
 
-async function openConversationTab(convId) {
-  const existing = tabs.find(t => t.id === convId);
-  if (existing) {
-    switchTab(convId);
-    return;
-  }
+function openConversationTab(convId) {
+  var existing = tabs.find(function(t) { return t.id === convId; });
+  if (existing) { switchTab(convId); return; }
 
-  const conv = (graphData.conversations||[]).find(c => c.id === convId);
-  const label = conv ? (conv.title||'').slice(0, 30) : convId.slice(0, 8);
+  var conv = (graphData.conversations||[]).find(function(c) { return c.id === convId; });
+  var label = conv ? (conv.title||'').slice(0, 30) : convId.slice(0, 8);
 
-  const tab = { id: convId, label, type: 'subgraph', data: null, loading: true };
+  var tab = { id: convId, label: label, type: 'subgraph', data: null, loading: true };
   tabs.push(tab);
   activeTabId = convId;
   renderTabBar();
   renderActiveGraph();
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 300000);
-
-  const msgCount = conv ? conv.message_count || 'many' : '?';
-  updateTabProgress(convId, `Analyzing ${msgCount} messages...`);
-
-  try {
-    const resp = await fetch(`/api/conversation-subgraph/${convId}`, { signal: controller.signal });
-    clearTimeout(timeout);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
+  fetch('/api/conversation-subgraph/' + convId).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data) {
     tab.data = data;
     tab.loading = false;
     if (activeTabId === convId) renderActiveGraph();
-  } catch (e) {
-    clearTimeout(timeout);
+  }).catch(function(e) {
     tab.loading = false;
-    tab.error = e.name === 'AbortError' ? 'Request timed out (large conversation — try switching to fast model)' : e.message;
+    tab.error = e.message || 'Request failed';
     if (activeTabId === convId) renderActiveGraph();
-  }
+  });
 }
 
 function updateTabProgress(tabId, msg) {
@@ -2004,7 +1985,7 @@ function hideTooltip() {
 }
 
 // ── Detail Panel ──────────────────────────────────────────────────────────
-async function selectConversation(convId) {
+function selectConversation(convId) {
   selectedConvId = convId;
   // Update list
   document.querySelectorAll('.conv-item.active').forEach(el => el.classList.remove('active'));
@@ -2018,23 +1999,20 @@ async function selectConversation(convId) {
   body.innerHTML = '';
   panel.classList.add('open');
 
-  try {
-    const resp = await fetch(`/api/conversation/${convId}`);
-    const data = await resp.json();
+  fetch('/api/conversation/' + convId).then(function(r) { return r.json(); }).then(function(data) {
     title.textContent = data.title || 'Conversation';
-    body.innerHTML = '<div style="margin-bottom:12px;font-size:12px;color:var(--text-muted);">' +
-      `Model: ${(data.models||[]).join(', ')} · ${new Date(data.created_at * 1000).toLocaleDateString()}</div>`;
-    for (const msg of data.messages) {
-      const div = document.createElement('div');
-      div.className = 'msg ' + msg.role;
-      const content = msg.content || '(empty)';
-      div.innerHTML = `<div class="msg-role">${msg.role} ${msg.model ? '· ' + msg.model : ''}</div>
-        <div class="msg-content">${esc(content)}</div>`;
-      body.appendChild(div);
+    var html = '<div style="margin-bottom:12px;font-size:12px;color:var(--text-muted);">' +
+      'Model: ' + (data.models||[]).join(', ') + ' · ' + new Date((data.created_at||0) * 1000).toLocaleDateString() + '</div>';
+    for (var i = 0; i < (data.messages||[]).length; i++) {
+      var msg = data.messages[i];
+      var content = msg.content || '(empty)';
+      html += '<div class="msg ' + msg.role + '"><div class="msg-role">' + msg.role + (msg.model ? ' · ' + msg.model : '') + '</div>' +
+        '<div class="msg-content">' + esc(content) + '</div></div>';
     }
-  } catch (e) {
+    body.innerHTML = html;
+  }).catch(function() {
     body.innerHTML = '<p style="color:var(--red);">Failed to load conversation.</p>';
-  }
+  });
 }
 
 function closeDetail() {
@@ -2117,75 +2095,62 @@ function setImportStatus(msg, type) {
   el.innerHTML = `<div class="modal-status ${type}">${esc(msg)}</div>`;
 }
 
-async function submitImport() {
-  const btn = document.getElementById('import-btn');
+function submitImport() {
+  var btn = document.getElementById('import-btn');
   btn.disabled = true;
   btn.textContent = 'Importing...';
 
-  const activeTab = document.querySelector('.modal-tab.active');
-  const tab = activeTab ? activeTab.dataset.tab : 'upload';
+  var activeTab = document.querySelector('.modal-tab.active');
+  var tab = activeTab ? activeTab.dataset.tab : 'upload';
 
-  try {
-    let body;
-    if (tab === 'upload' && importFile) {
-      const form = new FormData();
-      form.append('file', importFile);
-      body = form;
-    } else if (tab === 'paste') {
-      const text = document.getElementById('paste-area').value.trim();
-      if (!text) { setImportStatus('Paste some JSON first.', 'error'); btn.disabled = false; btn.textContent = 'Import'; return; }
-      body = text;
-    } else {
-      setImportStatus('Select a file or paste JSON.', 'error');
-      btn.disabled = false;
-      btn.textContent = 'Import';
-      return;
-    }
-
-    const opts = { method: 'POST' };
-    if (typeof body === 'string') {
-      opts.headers = { 'Content-Type': 'application/json' };
-      opts.body = body;
-    } else {
-      opts.body = body;
-    }
-
-    const resp = await fetch('/api/import-json', opts);
-    const result = await resp.json();
-
-    if (!resp.ok) {
-      setImportStatus(result.error || 'Import failed', 'error');
-      btn.disabled = false;
-      btn.textContent = 'Import';
-      return;
-    }
-
-    const count = result.conversations_added ?? 0;
-    setImportStatus(`Imported ${count} conversations. Rebuilding knowledge graph...`, 'info');
-
-    closeImportModal();
-
-    // Poll until graph is ready, then refresh
-    let attempts = 0;
-    const poll = setInterval(async () => {
-      attempts++;
-      try {
-        const r = await fetch('/api/graph');
-        const d = await r.json();
-        if (d && d.nodes && d.nodes.length > 0 && d.stats && d.stats.conversations > 0) {
-          clearInterval(poll);
-          graphData = d;
-          render();
-        }
-      } catch (_) {}
-      if (attempts > 120) { clearInterval(poll); location.reload(); }
-    }, 1000);
+  var body;
+  if (tab === 'upload' && importFile) {
+    var form = new FormData();
+    form.append('file', importFile);
+    body = form;
+  } else if (tab === 'paste') {
+    var text = document.getElementById('paste-area').value.trim();
+    if (!text) { setImportStatus('Paste some JSON first.', 'error'); btn.disabled = false; btn.textContent = 'Import'; return; }
+    body = text;
+  } else {
+    setImportStatus('Select a file or paste JSON.', 'error');
+    btn.disabled = false; btn.textContent = 'Import';
     return;
-  } catch (e) {
-    setImportStatus(e.message || 'Import failed', 'error');
-    btn.disabled = false;
-    btn.textContent = 'Import';
   }
+
+  var opts = { method: 'POST' };
+  if (typeof body === 'string') {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = body;
+  } else {
+    opts.body = body;
+  }
+
+  fetch('/api/import-json', opts).then(function(r) { return r.json(); }).then(function(result) {
+    if (result.status === 'imported') {
+      setImportStatus('Imported ' + (result.conversations_added||0) + ' conversations. Rebuilding...', 'info');
+      closeImportModal();
+      // Poll for completion
+      var attempts = 0;
+      var poll = setInterval(function() {
+        attempts++;
+        fetch('/api/graph').then(function(r) { return r.json(); }).then(function(d) {
+          if (d && d.nodes && d.nodes.length > 0 && d.stats && d.stats.conversations > 0) {
+            clearInterval(poll);
+            graphData = d;
+            render();
+          }
+        }).catch(function() {});
+        if (attempts > 120) { clearInterval(poll); location.reload(); }
+      }, 1000);
+    } else {
+      setImportStatus(result.error || 'Import failed', 'error');
+      btn.disabled = false; btn.textContent = 'Import';
+    }
+  }).catch(function(e) {
+    setImportStatus(e.message || 'Import failed', 'error');
+    btn.disabled = false; btn.textContent = 'Import';
+  });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
