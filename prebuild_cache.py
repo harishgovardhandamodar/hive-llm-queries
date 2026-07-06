@@ -13,13 +13,19 @@ sys.path.insert(0, "/Users/harishgovardhandamodar/codebase/hive-datatype")
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "llama3.2:3b"
 
-CHAT_FILE = Path("chatHistory/chat-export-1783327480401.json")
 CACHE_PATH = Path(".extraction_cache.json")
 
-# Load data
+# Load the newest JSON file from chatHistory
+chat_files = sorted(Path("chatHistory").glob("*.json"), reverse=True)
+if not chat_files:
+    print("No chat history files found in chatHistory/")
+    sys.exit(1)
+CHAT_FILE = chat_files[0]
+print(f"Loading {CHAT_FILE.name}")
+
 with open(CHAT_FILE) as f:
     data = json.load(f)
-convs = data["data"]
+convs = data.get("data", []) if isinstance(data, dict) else data
 print(f"Loaded {len(convs)} conversations")
 
 # Load existing cache
