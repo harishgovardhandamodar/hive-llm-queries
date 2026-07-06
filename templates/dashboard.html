@@ -526,6 +526,18 @@ a:hover { text-decoration: underline; }
   background: var(--bg-tertiary);
   color: var(--text-muted);
 }
+.sg-breadcrumb {
+  padding: 6px 12px;
+  font-size: 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.sg-back { color: var(--accent); cursor: pointer; text-decoration: none; }
+.sg-back:hover { text-decoration: underline; }
 /* Modal */
 .modal-overlay {
   position: fixed; inset: 0;
@@ -1134,103 +1146,245 @@ function getNodeRadius(d) {
   }
 }
 
-// ── Subgraph (split view: graph + grouped message panel) ─────────────────
+// ── Subgraph with intent drill-down ─────────────────────────────────────
+let sgState = { view: 'overview', intentKey: null, data: null };
+
 function renderSubgraph(data, viewport) {
+  sgState.data = data;
+  sgState.view = 'overview';
+  sgState.intentKey = null;
+  renderSGView(viewport);
+}
+
+function renderSGView(viewport) {
+  viewport.innerHTML = '';
+  const data = sgState.data;
+  if (!data) return;
+
   const vpHeight = viewport.clientHeight || 600;
   const vpWidth = viewport.clientWidth || 800;
-  const graphH = Math.floor(vpHeight * 0.55);
-  const panelH = vpHeight - graphH;
 
-  const svg = d3.select(viewport).append('svg')
-    .attr('width', vpWidth).attr('height', graphH)
-    .style('display', 'block');
+  if (sgState.view === 'overview') {
+    renderSGOverview(data, viewport, vpWidth, vpHeight);
+  } else {
+    renderSGIntent(data, viewport, vpWidth, vpHeight);
+  }
+}
+
+function renderSGOverview(data, viewport, w, h) {
+  const graphH = Math.floor(h * 0.45);
+  const panelH = h - graphH;
+  const conv = data.conversation || {};
+  const groups = data.message_groups || {};
+
+  // ── Overview graph: only conv + intents + summary ──
+  const svg = d3.select(viewport).append('svg').attr('width', w).attr('height', graphH).style('display', 'block');
   const g = svg.append('g');
-
-  const zoom = d3.zoom().scaleExtent([0.2, 4])
-    .on('zoom', (event) => g.attr('transform', event.transform));
+  const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', (ev) => g.attr('transform', ev.transform));
   svg.call(zoom);
 
-  const nodes = data.nodes.map(n => ({ ...n, nodeType: getNodeType(n), r: getNodeRadius(n) }));
-  const links = data.links.map(l => ({ source: l.source, target: l.target, relation: l.relation }));
+  const convNode = { id: `conv_${conv.id}`, label: conv.title || 'Conversation', nodeType: 'conversation', r: 20 };
+  const intentNodes = Object.keys(groups).map(k => ({
+    id: `intent_${k}`, label: k, nodeType: 'intent', r: 14, _intentKey: k, _msgCount: groups[k].length,
+  }));
+  const topicNodes = (conv.topics || []).map(t => ({
+    id: `topic_${t}`, label: t, nodeType: 'topic', r: 9,
+  }));
+
+  const nodes = [convNode, ...intentNodes, ...topicNodes];
+  const links = [
+    ...intentNodes.map(n => ({ source: convNode.id, target: n.id, relation: 'has_intent' })),
+    ...topicNodes.map(n => ({ source: convNode.id, target: n.id, relation: 'topic' })),
+  ];
 
   const sim = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(d => d.id).distance(100))
-    .force('charge', d3.forceManyBody().strength(-300))
-    .force('center', d3.forceCenter(width / 2, graphH / 2))
-    .force('collision', d3.forceCollide().radius(d => d.r + 10));
-  simulations[activeTabId] = sim;
+    .force('link', d3.forceLink(links).id(d => d.id).distance(130))
+    .force('charge', d3.forceManyBody().strength(-400))
+    .force('center', d3.forceCenter(w / 2, graphH / 2))
+    .force('collision', d3.forceCollide().radius(d => d.r + 12));
 
-  const link = g.append('g').selectAll('line').data(links).join('line')
-    .attr('stroke', 'var(--border)').attr('stroke-width', 1.5).attr('stroke-opacity', 0.5);
+  g.append('g').selectAll('line').data(links).join('line')
+    .attr('stroke', 'var(--border)').attr('stroke-width', 1.5).attr('stroke-opacity', 0.4);
 
-  const linkLabels = g.append('g').selectAll('text').data(links).join('text')
-    .text(d => d.relation).attr('font-size', 8).attr('fill', 'var(--text-dim)')
-    .attr('text-anchor', 'middle');
-
-  const node = g.append('g').selectAll('circle').data(nodes).join('circle')
+  g.append('g').selectAll('circle').data(nodes).join('circle')
     .attr('r', d => d.r).attr('fill', d => getNodeColor(d))
     .attr('stroke', 'var(--bg-primary)').attr('stroke-width', 2)
-    .style('cursor', 'pointer')
+    .style('cursor', d => d._intentKey ? 'pointer' : 'default')
+    .on('click', (ev, d) => {
+      if (d._intentKey) {
+        sgState.view = 'intent';
+        sgState.intentKey = d._intentKey;
+        renderSGView(viewport);
+      }
+    })
+    .on('mouseenter', (ev, d) => {
+      const tip = d3.select('body').append('div').attr('class', 'tooltip');
+      let html = `<h3>${esc(d.label)}</h3>`;
+      if (d._intentKey) html += `<p class="tt-meta">${d._msgCount} queries</p>`;
+      tip.html(html).style('left', (ev.pageX + 12) + 'px').style('top', (ev.pageY - 10) + 'px');
+    })
+    .on('mouseleave', () => d3.selectAll('.tooltip').remove())
     .call(d3.drag().on('start', (ev, d) => { if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
       .on('drag', (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
-      .on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }))
-    .on('mouseenter', (ev, d) => showSubgraphTooltip(ev, d, data))
-    .on('mouseleave', () => hideTooltip());
+      .on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
 
-  const label = g.append('g').selectAll('text').data(nodes).join('text')
-    .text(d => (d.label||'').length > 22 ? (d.label||'').slice(0, 20) + '..' : d.label||'')
-    .attr('font-size', d => Math.max(8, d.r * 0.45)).attr('fill', 'var(--text-secondary)')
+  g.append('g').selectAll('text').data(nodes).join('text')
+    .text(d => d.label.length > 18 ? d.label.slice(0, 16) + '..' : d.label)
+    .attr('font-size', d => Math.max(8, d.r * 0.5)).attr('fill', 'var(--text-secondary)')
     .attr('text-anchor', 'middle').attr('dy', d => d.r + 14);
 
   sim.on('tick', () => {
-    link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+    g.selectAll('line').attr('x1', d => d.source.x).attr('y1', d => d.source.y)
       .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-    linkLabels.attr('x', d => (d.source.x + d.target.x) / 2)
-      .attr('y', d => (d.source.y + d.target.y) / 2);
-    node.attr('cx', d => d.x).attr('cy', d => d.y);
-    label.attr('x', d => d.x).attr('y', d => d.y);
+    g.selectAll('circle').attr('cx', d => d.x).attr('cy', d => d.y);
+    g.selectAll('text').attr('x', d => d.x).attr('y', d => d.y);
   });
 
   // ── Grouped message panel ──
   const panel = d3.select(viewport).append('div').attr('class', 'subgraph-panel')
     .style('height', panelH + 'px').style('overflow-y', 'auto');
 
-  const conv = data.conversation || {};
-  const groups = data.message_groups || {};
-
-  // Header
   panel.append('div').attr('class', 'sg-header').html(`
     <strong>${esc(conv.title||'Conversation')}</strong>
     <span style="color:var(--text-muted);font-size:11px;margin-left:8px;">
-      Intent: ${esc(conv.intent||'?')} · Topics: ${(conv.topics||[]).join(', ')}
+      ${Object.keys(groups).length} intent groups · ${conv.message_count||0} messages
     </span>
   `);
 
-  // Groups
   for (const [groupKey, msgs] of Object.entries(groups)) {
+    const col = intentColor(groupKey);
     const groupDiv = panel.append('div').attr('class', 'sg-group');
-    groupDiv.append('div').attr('class', 'sg-group-title')
-      .html(`<span class="sg-intent-tag" style="background:${intentColor(groupKey)}33;color:${intentColor(groupKey)}">${esc(groupKey)}</span> ${msgs.length} queries`);
+    const titleDiv = groupDiv.append('div').attr('class', 'sg-group-title')
+      .style('cursor', 'pointer')
+      .on('click', () => {
+        sgState.view = 'intent';
+        sgState.intentKey = groupKey;
+        renderSGView(viewport);
+      });
+    titleDiv.html(`
+      <span class="sg-intent-tag" style="background:${col}22;color:${col}">${esc(groupKey)}</span>
+      ${msgs.length} queries <span style="color:var(--text-dim);font-size:10px;">click to explore</span>
+    `);
 
-    for (const msg of msgs) {
+    // Show first 2 messages as preview
+    for (const msg of msgs.slice(0, 2)) {
       const card = groupDiv.append('div').attr('class', 'sg-msg-card')
-        .attr('data-msg-idx', msg.index)
-        .on('click', () => highlightSubgraphNode(msg.index, data));
-
-      const topicsHtml = (msg.topics||[]).map(t =>
-        `<span class="sg-topic-tag">${esc(t)}</span>`
-      ).join('');
-
+        .on('click', () => openConversationDetail(conv.id));
       card.html(`
-        <div class="sg-msg-query">${esc(truncate(msg.content, 180))}</div>
+        <div class="sg-msg-query">${esc(truncate(msg.content, 140))}</div>
         <div class="sg-msg-meta">
-          ${topicsHtml}
-          ${msg.model ? `<span style="color:var(--text-muted);font-size:10px;">${esc(msg.model)}</span>` : ''}
+          ${(msg.topics||[]).map(t => `<span class="sg-topic-tag">${esc(t)}</span>`).join('')}
+          ${msg.answer ? `<span style="color:var(--text-dim);font-size:10px;">✓ has answer</span>` : ''}
         </div>
-        ${msg.answer ? `<div class="sg-msg-answer">${esc(truncate(msg.answer, 120))}</div>` : ''}
       `);
     }
   }
+}
+
+function renderSGIntent(data, viewport, w, h) {
+  const graphH = Math.floor(h * 0.55);
+  const panelH = h - graphH;
+  const conv = data.conversation || {};
+  const groups = data.message_groups || {};
+  const intentKey = sgState.intentKey || '';
+  const msgs = groups[intentKey] || [];
+  const col = intentColor(intentKey);
+
+  // ── Breadcrumb bar ──
+  const bread = d3.select(viewport).append('div').attr('class', 'sg-breadcrumb').html(`
+    <a href="#" class="sg-back" onclick="sgState.view='overview';sgState.intentKey=null;renderSGView(document.getElementById('graph-viewport'));return false;">&larr; ${esc(conv.title||'Conversation')}</a>
+    <span style="color:var(--text-muted);margin:0 6px;">/</span>
+    <span class="sg-intent-tag" style="background:${col}22;color:${col};display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;">${esc(intentKey)}</span>
+    <span style="color:var(--text-muted);font-size:11px;margin-left:6px;">${msgs.length} queries</span>
+  `);
+
+  // ── Intent-focused graph ──
+  const svg = d3.select(viewport).append('svg').attr('width', w).attr('height', graphH).style('display', 'block');
+  const g = svg.append('g');
+  const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', (ev) => g.attr('transform', ev.transform));
+  svg.call(zoom);
+
+  const intentNode = { id: `intent_${intentKey}`, label: intentKey, nodeType: 'intent', r: 16, _fixed: true };
+
+  const queryNodes = msgs.map((m, i) => ({
+    id: `q_${m.index}`, label: truncate(m.content, 40), nodeType: 'query', r: 10, _msgIdx: m.index,
+  }));
+  const answerNodes = msgs.filter(m => m.answer).map((m, i) => ({
+    id: `a_${m.index}`, label: truncate(m.answer, 40), nodeType: 'answer', r: 9,
+  }));
+  const topicNodes = [...new Set(msgs.flatMap(m => m.topics || []))].map(t => ({
+    id: `t_${t}`, label: t, nodeType: 'topic', r: 8,
+  }));
+
+  const allNodes = [intentNode, ...queryNodes, ...answerNodes, ...topicNodes];
+  const links = [
+    ...queryNodes.map(n => ({ source: intentNode.id, target: n.id, relation: 'query' })),
+    ...msgs.filter(m => m.answer).map(m => ({ source: `q_${m.index}`, target: `a_${m.index}`, relation: 'answers' })),
+    ...topicNodes.map(t => ({ source: intentNode.id, target: t.id, relation: 'topic' })),
+  ];
+
+  const sim = d3.forceSimulation(allNodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(100))
+    .force('charge', d3.forceManyBody().strength(-250))
+    .force('center', d3.forceCenter(w / 2, graphH / 2))
+    .force('collision', d3.forceCollide().radius(d => d.r + 10));
+
+  g.append('g').selectAll('line').data(links).join('line')
+    .attr('stroke', col).attr('stroke-width', 1.5).attr('stroke-opacity', 0.4);
+
+  g.append('g').selectAll('circle').data(allNodes).join('circle')
+    .attr('r', d => d.r).attr('fill', d => getNodeColor(d))
+    .attr('stroke', d => d._fixed ? col : 'var(--bg-primary)').attr('stroke-width', 2)
+    .style('cursor', 'pointer')
+    .on('click', (ev, d) => {
+      if (d._msgIdx !== undefined) openConversationDetail(conv.id);
+    })
+    .on('mouseenter', (ev, d) => {
+      const tip = d3.select('body').append('div').attr('class', 'tooltip');
+      tip.html(`<h3>${esc(d.label)}</h3>`)
+        .style('left', (ev.pageX + 12) + 'px').style('top', (ev.pageY - 10) + 'px');
+    })
+    .on('mouseleave', () => d3.selectAll('.tooltip').remove())
+    .call(d3.drag().on('start', (ev, d) => { if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+      .on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+  g.append('g').selectAll('text').data(allNodes).join('text')
+    .text(d => d.label.length > 20 ? d.label.slice(0, 18) + '..' : d.label)
+    .attr('font-size', d => Math.max(7, d.r * 0.45)).attr('fill', 'var(--text-secondary)')
+    .attr('text-anchor', 'middle').attr('dy', d => d.r + 12);
+
+  sim.on('tick', () => {
+    g.selectAll('line').attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    g.selectAll('circle').attr('cx', d => d.x).attr('cy', d => d.y);
+    g.selectAll('text').attr('x', d => d.x).attr('y', d => d.y);
+  });
+
+  // ── Message detail panel below graph ──
+  const panel = d3.select(viewport).append('div').attr('class', 'subgraph-panel')
+    .style('height', panelH + 'px').style('overflow-y', 'auto');
+
+  for (const msg of msgs) {
+    const card = panel.append('div').attr('class', 'sg-msg-card')
+      .style('border-left', `3px solid ${col}`)
+      .on('click', () => openConversationDetail(conv.id));
+
+    card.html(`
+      <div class="sg-msg-query" style="font-weight:600;">${esc(msg.content)}</div>
+      ${msg.answer ? `<div class="sg-msg-answer" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);color:var(--text-secondary);">${esc(truncate(msg.answer, 300))}</div>` : ''}
+      <div class="sg-msg-meta" style="margin-top:6px;">
+        ${(msg.topics||[]).map(t => `<span class="sg-topic-tag">${esc(t)}</span>`).join('')}
+        ${msg.model ? `<span style="color:var(--text-muted);font-size:10px;">${esc(msg.model)}</span>` : ''}
+      </div>
+    `);
+  }
+}
+
+function openConversationDetail(convId) {
+  const panel = document.getElementById('detail-panel');
+  if (panel) panel.classList.add('open');
+  selectConversation(convId);
 }
 
 function truncate(s, n) { return (s||'').length > n ? (s||'').slice(0, n) + '...' : s||''; }
@@ -1243,27 +1397,12 @@ function intentColor(intent) {
 }
 
 function highlightSubgraphNode(msgIdx, data) {
-  const msgId = `msg_${data.conversation.id}_${msgIdx}`;
+  const msgId = `q_${msgIdx}`;
   const svg = d3.select('#graph-viewport > svg');
-  svg.selectAll('circle').attr('opacity', 0.3).attr('stroke-width', 1);
-  svg.selectAll('line').attr('stroke-opacity', 0.15);
-  svg.selectAll('circle').filter(d => d && d.id === msgId)
+  svg.selectAll('circle').attr('opacity', 0.2).attr('stroke-width', 1);
+  svg.selectAll('line').attr('stroke-opacity', 0.1);
+  svg.selectAll('circle').filter(d => d && (d.id === msgId || d.id === `a_${msgIdx}`))
     .attr('opacity', 1).attr('stroke', '#fff').attr('stroke-width', 3);
-  svg.selectAll('line').filter(d => d && (d.source.id === msgId || d.target.id === msgId))
-    .attr('stroke-opacity', 0.8);
-  const answerIdx = msgIdx + 1;
-  if (answerIdx < (data.messages||[]).length) {
-    const ansId = `msg_${data.conversation.id}_${answerIdx}`;
-    svg.selectAll('circle').filter(d => d && d.id === ansId)
-      .attr('opacity', 1).attr('stroke', '#fff').attr('stroke-width', 2);
-  }
-}
-
-function showSubgraphTooltip(event, d, data) {
-  const tip = d3.select('body').append('div').attr('class', 'tooltip');
-  let html = `<h3>${esc(d.label)}</h3>`;
-  html += `<p class="tt-meta">Type: ${d.nodeType}</p>`;
-  tip.html(html).style('left', (event.pageX + 12) + 'px').style('top', (event.pageY - 10) + 'px');
 }
 
 function hideTooltip() {
