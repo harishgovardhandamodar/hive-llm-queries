@@ -405,15 +405,15 @@ a:hover { text-decoration: underline; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
 /* Node type colors */
-.node-conversation { fill: var(--accent); }
-.node-topic { fill: var(--green); }
-.node-concept { fill: var(--yellow); }
-.node-intent { fill: var(--red); }
-.node-model { fill: var(--purple); }
-.node-query { fill: #f0883e; }
-.node-answer { fill: #79c0ff; }
-.node-summary { fill: var(--text-muted); }
-.node-tag { fill: var(--text-dim); }
+.node-conversation { fill: var(--accent); background: var(--accent); }
+.node-topic { fill: var(--green); background: var(--green); }
+.node-concept { fill: var(--yellow); background: var(--yellow); }
+.node-intent { fill: var(--red); background: var(--red); }
+.node-model { fill: var(--purple); background: var(--purple); }
+.node-query { fill: #f0883e; background: #f0883e; }
+.node-answer { fill: #79c0ff; background: #79c0ff; }
+.node-summary { fill: var(--text-muted); background: var(--text-muted); }
+.node-tag { fill: var(--text-dim); background: var(--text-dim); }
 
 /* Graph tab bar */
 .graph-area { display: flex; flex-direction: column; flex: 1; overflow: hidden; position: relative; }
@@ -678,6 +678,11 @@ a:hover { text-decoration: underline; }
       <div class="filter-tags" id="model-tags"></div>
     </div>
 
+    <div class="filters" style="border-bottom:none;padding-top:4px;">
+      <h3>Analysis Model</h3>
+      <div style="display:flex;gap:4px;margin-top:4px;" id="analysis-model-selector"></div>
+    </div>
+
     <div class="conv-list" id="conv-list"></div>
   </aside>
 
@@ -765,8 +770,41 @@ async function loadData() {
 function render() {
   renderStats();
   renderFilters();
+  renderAnalysisModelSelector();
   renderConvList();
   initTabs();
+}
+
+async function renderAnalysisModelSelector() {
+  const container = document.getElementById('analysis-model-selector');
+  container.innerHTML = '';
+  try {
+    const resp = await fetch('/api/model');
+    const data = await resp.json();
+    const current = data.model;
+    for (const m of data.available) {
+      const btn = document.createElement('button');
+      btn.className = 'filter-tag' + (m === current ? ' active' : '');
+      const short = m.includes(':') ? m.split(':')[0] : m;
+      btn.textContent = short.length > 12 ? short.slice(0, 10) + '..' : short;
+      btn.title = m;
+      btn.onclick = async () => {
+        const r = await fetch('/api/model', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({model: m}),
+        });
+        const result = await r.json();
+        if (result.status === 'ok') {
+          renderAnalysisModelSelector();
+          // Rebuild graph with new model
+          graphData = await (await fetch('/api/graph?force=1')).json();
+          render();
+        }
+      };
+      container.appendChild(btn);
+    }
+  } catch (_) {}
 }
 
 function renderStats() {

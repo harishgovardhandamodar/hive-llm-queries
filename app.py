@@ -28,6 +28,8 @@ CHAT_HISTORY_PATH = Path(__file__).parent / "chatHistory"
 CACHE_PATH = Path(__file__).parent / ".extraction_cache.json"
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
+AVAILABLE_MODELS = ["llama3.2:3b", "qwen3.6:35b-mlx"]
+_current_model: str = OLLAMA_MODEL
 MAX_WORKERS = 6
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -123,7 +125,7 @@ def extract_with_ollama(conv: dict) -> tuple[str, dict]:
     try:
         resp = requests.post(
             OLLAMA_URL,
-            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+            json={"model": _current_model, "prompt": prompt, "stream": False},
             timeout=120,
         )
         raw = resp.json().get("response", "")
@@ -518,6 +520,20 @@ def build_knowledge_graph(convs: list[dict]) -> dict:
 
 _graph_data: dict | None = None
 _build_in_progress = False
+
+
+@app.route("/api/model", methods=["GET", "POST"])
+def api_model():
+    """Get or set the active Ollama model."""
+    global _current_model, _graph_data
+    if request.method == "POST":
+        model = (request.json or {}).get("model", "")
+        if model and model in AVAILABLE_MODELS:
+            _current_model = model
+            _graph_data = None
+            return jsonify({"status": "ok", "model": _current_model, "available": AVAILABLE_MODELS})
+        return jsonify({"error": f"Model must be one of {AVAILABLE_MODELS}", "available": AVAILABLE_MODELS}), 400
+    return jsonify({"model": _current_model, "available": AVAILABLE_MODELS})
 
 
 def get_graph_data(force: bool = False) -> dict:
