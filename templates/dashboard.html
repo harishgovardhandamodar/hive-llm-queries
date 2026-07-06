@@ -180,6 +180,40 @@ a:hover { text-decoration: underline; }
 }
 .search-box input:focus { border-color: var(--accent); }
 
+/* Sidebar tab bar */
+.sidebar-tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  align-items: center;
+  padding: 0 8px;
+  background: var(--bg-secondary);
+}
+.sidebar-tab {
+  flex: 1;
+  padding: 7px 8px;
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  user-select: none;
+}
+.sidebar-tab:hover { color: var(--text-secondary); }
+.sidebar-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.sidebar-note-btn {
+  font-size: 15px !important;
+  padding: 2px 8px !important;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
 /* Conversation list */
 .conv-list {
   flex: 1;
@@ -1180,15 +1214,14 @@ a:hover { text-decoration: underline; }
       <div style="display:flex;gap:4px;margin-top:4px;" id="analysis-model-selector"></div>
     </div>
 
-    <div class="filters" id="notes-section" style="border-bottom:none;">
-      <h3>Journal Notes <span style="font-weight:400;color:var(--text-dim);font-size:10px;text-transform:none;letter-spacing:0;" id="notes-count"></span></h3>
-      <div style="display:flex;gap:4px;margin-bottom:6px;">
-        <button class="btn" style="flex:1;font-size:11px;padding:4px 8px;" onclick="showNoteModal()">+ New Note</button>
-      </div>
-      <div id="notes-list" style="max-height:140px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;"></div>
+    <div class="sidebar-tab-bar">
+      <span class="sidebar-tab active" onclick="switchSidebarTab('convs')">Conversations</span>
+      <span class="sidebar-tab" onclick="switchSidebarTab('notes')">Notes <span id="notes-badge" style="font-weight:400;color:var(--text-dim);font-size:10px;"></span></span>
+      <button class="btn sidebar-note-btn" onclick="showNoteModal()" title="New Note">+</button>
     </div>
 
     <div class="conv-list" id="conv-list"></div>
+    <div class="notes-panel" id="notes-panel" style="display:none;flex:1;overflow-y:auto;padding:8px 0;"></div>
   </aside>
 
   <!-- Main -->
@@ -2748,6 +2781,14 @@ function esc(s) {
 }
 
 // ── Journal Notes ────────────────────────────────────────────────────────────
+function switchSidebarTab(tab) {
+  document.querySelectorAll('.sidebar-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.getElementById('conv-list').style.display = tab === 'convs' ? 'block' : 'none';
+  document.getElementById('notes-panel').style.display = tab === 'notes' ? 'block' : 'none';
+  var activeTab = Array.from(document.querySelectorAll('.sidebar-tab')).find(function(t) { return t.textContent.toLowerCase().startsWith(tab === 'convs' ? 'conversations' : 'notes'); });
+  if (activeTab) activeTab.classList.add('active');
+}
+
 var noteLinks = [];
 
 function showNoteModal() {
@@ -2817,27 +2858,29 @@ function saveNote() {
 }
 
 function renderNotesList() {
-  var list = document.getElementById('notes-list');
-  if (!list) return;
-  var count = document.getElementById('notes-count');
+  var panel = document.getElementById('notes-panel');
+  if (!panel) return;
+  var badge = document.getElementById('notes-badge');
   fetch('/api/notes').then(function(r) { return r.json(); }).then(function(notes) {
-    list.innerHTML = '';
-    if (count) count.textContent = '(' + notes.length + ')';
+    panel.innerHTML = '';
+    if (badge) badge.textContent = '(' + notes.length + ')';
     if (!notes.length) {
-      list.innerHTML = '<div style="font-size:11px;color:var(--text-dim);padding:4px 0;">No notes yet.</div>';
+      panel.innerHTML = '<div style="font-size:12px;color:var(--text-dim);padding:16px;text-align:center;">No notes yet.<br><span style="color:var(--accent);cursor:pointer;" onclick="showNoteModal()">Create one</span></div>';
       return;
     }
-    notes.slice(-5).reverse().forEach(function(n) {
+    notes.slice().reverse().forEach(function(n) {
       var el = document.createElement('div');
-      el.style.cssText = 'font-size:11px;padding:4px 6px;border-radius:4px;cursor:pointer;color:var(--text-secondary);background:var(--bg-primary);border:1px solid var(--border);transition:border-color 0.15s;';
-      el.onmouseenter = function() { el.style.borderColor = 'var(--accent)'; };
-      el.onmouseleave = function() { el.style.borderColor = 'var(--border)'; };
+      el.className = 'conv-item';
+      el.style.cssText = 'padding:8px 16px;cursor:pointer;border-bottom:1px solid var(--bg-tertiary);transition:background 0.15s;';
+      el.onmouseenter = function() { el.style.background = 'var(--hover-bg)'; };
+      el.onmouseleave = function() { el.style.background = 'transparent'; };
       el.onclick = function() { openNoteDetail(n.id); };
       var ext = n.extraction || {};
-      var tags = (ext.topics || []).slice(0,2).map(function(t) { return '<span style="font-size:9px;padding:1px 4px;border-radius:4px;background:var(--bg-tertiary);color:var(--text-dim);">' + esc(t) + '</span>'; }).join('');
-      el.innerHTML = '<div style="display:flex;justify-content:space-between;"><span style="font-weight:600;">' + esc(n.title) + '</span><span style="color:var(--text-dim);font-size:10px;">' + n.date + '</span></div>' +
-        (tags ? '<div style="margin-top:2px;display:flex;gap:2px;">' + tags + '</div>' : '');
-      list.appendChild(el);
+      var tags = (ext.topics || []).slice(0,3).map(function(t) { return '<span class="tag-small">' + esc(t) + '</span>'; }).join('');
+      el.innerHTML = '<div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(n.title) + '</div>' +
+        '<div style="font-size:10px;color:var(--text-dim);">' + n.date + (ext.intent ? ' \u00b7 ' + esc(ext.intent) : '') + '</div>' +
+        (tags ? '<div style="margin-top:3px;display:flex;gap:2px;flex-wrap:wrap;">' + tags + '</div>' : '');
+      panel.appendChild(el);
     });
   }).catch(function() {});
 }
