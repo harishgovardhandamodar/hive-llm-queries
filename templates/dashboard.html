@@ -6,15 +6,68 @@
 <title>Hive LLM Queries Dashboard</title>
 <script src="/static/d3.v7.min.js"></script>
 <style>
+:root, [data-theme="dark"] {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #21262d;
+  --border: #30363d;
+  --border-light: #21262d;
+  --text-primary: #f0f6fc;
+  --text-secondary: #c9d1d9;
+  --text-muted: #8b949e;
+  --text-dim: #484f58;
+  --accent: #58a6ff;
+  --accent-bg: #1f6feb22;
+  --accent-border: #1f6feb33;
+  --green: #3fb950;
+  --yellow: #d29922;
+  --red: #f85149;
+  --purple: #bc8cff;
+  --btn-bg: #21262d;
+  --btn-hover: #30363d;
+  --btn-primary: #1f6feb;
+  --btn-primary-hover: #388bfd;
+  --hover-bg: #1c2128;
+  --active-bg: #1f6feb22;
+  --shadow: rgba(0,0,0,0.4);
+  --skeleton: #21262d;
+}
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f6f8fa;
+  --bg-tertiary: #eaeef2;
+  --border: #d0d7de;
+  --border-light: #d0d7de;
+  --text-primary: #1f2328;
+  --text-secondary: #24292f;
+  --text-muted: #656d76;
+  --text-dim: #8c959f;
+  --accent: #0969da;
+  --accent-bg: #ddf4ff;
+  --accent-border: #54aeff66;
+  --green: #1a7f37;
+  --yellow: #9a6700;
+  --red: #cf222e;
+  --purple: #8250df;
+  --btn-bg: #f6f8fa;
+  --btn-hover: #eaeef2;
+  --btn-primary: #0969da;
+  --btn-primary-hover: #0550ae;
+  --hover-bg: #f3f4f6;
+  --active-bg: #ddf4ff;
+  --shadow: rgba(0,0,0,0.15);
+  --skeleton: #eaeef2;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #0d1117;
-  color: #c9d1d9;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
   overflow: hidden;
   height: 100vh;
 }
-a { color: #58a6ff; text-decoration: none; }
+a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 /* Layout */
@@ -22,8 +75,8 @@ a:hover { text-decoration: underline; }
 .sidebar {
   width: 340px;
   min-width: 340px;
-  background: #161b22;
-  border-right: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -33,16 +86,16 @@ a:hover { text-decoration: underline; }
 /* Sidebar Header */
 .sidebar-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--border);
 }
 .sidebar-header h1 {
   font-size: 18px;
   font-weight: 700;
-  color: #f0f6fc;
+  color: var(--text-primary);
 }
 .sidebar-header p {
   font-size: 12px;
-  color: #8b949e;
+  color: var(--text-muted);
   margin-top: 2px;
 }
 
@@ -52,11 +105,11 @@ a:hover { text-decoration: underline; }
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   padding: 12px 16px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--border);
 }
 .stat-card {
-  background: #0d1117;
-  border: 1px solid #30363d;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 12px;
   text-align: center;
@@ -64,26 +117,26 @@ a:hover { text-decoration: underline; }
 .stat-card .value {
   font-size: 20px;
   font-weight: 700;
-  color: #f0f6fc;
+  color: var(--text-primary);
 }
 .stat-card .label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #8b949e;
+  color: var(--text-muted);
   margin-top: 2px;
 }
 
 /* Filters */
 .filters {
   padding: 12px 16px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--border);
 }
 .filters h3 {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #8b949e;
+  color: var(--text-muted);
   margin-bottom: 8px;
 }
 .filter-tags {
@@ -97,35 +150,35 @@ a:hover { text-decoration: underline; }
   border-radius: 12px;
   font-size: 11px;
   cursor: pointer;
-  border: 1px solid #30363d;
+  border: 1px solid var(--border);
   background: transparent;
-  color: #c9d1d9;
+  color: var(--text-secondary);
   transition: all 0.15s;
 }
-.filter-tag:hover { border-color: #58a6ff; color: #58a6ff; }
+.filter-tag:hover { border-color: var(--accent); color: var(--accent); }
 .filter-tag.active {
-  background: #1f6feb;
-  border-color: #1f6feb;
+  background: var(--btn-primary);
+  border-color: var(--btn-primary);
   color: #fff;
 }
-.filter-tag.active:hover { background: #388bfd; border-color: #388bfd; }
+.filter-tag.active:hover { background: var(--btn-primary-hover); border-color: var(--btn-primary-hover); }
 
 /* Search */
 .search-box {
   padding: 8px 16px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--border);
 }
 .search-box input {
   width: 100%;
   padding: 6px 10px;
-  border: 1px solid #30363d;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #0d1117;
-  color: #c9d1d9;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
   font-size: 13px;
   outline: none;
 }
-.search-box input:focus { border-color: #58a6ff; }
+.search-box input:focus { border-color: var(--accent); }
 
 /* Conversation list */
 .conv-list {
@@ -136,15 +189,15 @@ a:hover { text-decoration: underline; }
 .conv-item {
   padding: 10px 16px;
   cursor: pointer;
-  border-bottom: 1px solid #21262d;
+  border-bottom: 1px solid var(--bg-tertiary);
   transition: background 0.15s;
 }
-.conv-item:hover { background: #1c2128; }
-.conv-item.active { background: #1f6feb22; border-left: 3px solid #1f6feb; }
+.conv-item:hover { background: var(--hover-bg); }
+.conv-item.active { background: var(--btn-primary)22; border-left: 3px solid var(--btn-primary); }
 .conv-item h4 {
   font-size: 13px;
   font-weight: 600;
-  color: #f0f6fc;
+  color: var(--text-primary);
   margin-bottom: 2px;
   white-space: nowrap;
   overflow: hidden;
@@ -152,7 +205,7 @@ a:hover { text-decoration: underline; }
 }
 .conv-item .conv-meta {
   font-size: 11px;
-  color: #8b949e;
+  color: var(--text-muted);
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -164,7 +217,7 @@ a:hover { text-decoration: underline; }
 }
 .conv-item .conv-summary {
   font-size: 11px;
-  color: #8b949e;
+  color: var(--text-muted);
   margin-top: 3px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -176,8 +229,8 @@ a:hover { text-decoration: underline; }
   padding: 1px 5px;
   border-radius: 8px;
   font-size: 10px;
-  background: #21262d;
-  color: #8b949e;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
 }
 
 /* Graph area */
@@ -190,18 +243,18 @@ a:hover { text-decoration: underline; }
 /* Tooltip */
 .tooltip {
   position: absolute;
-  background: #161b22;
-  border: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 16px;
   pointer-events: none;
   max-width: 360px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  box-shadow: 0 8px 24px var(--shadow);
   z-index: 100;
   font-size: 13px;
 }
-.tooltip h3 { font-size: 14px; color: #f0f6fc; margin-bottom: 4px; }
-.tooltip p { font-size: 12px; color: #8b949e; }
+.tooltip h3 { font-size: 14px; color: var(--text-primary); margin-bottom: 4px; }
+.tooltip p { font-size: 12px; color: var(--text-muted); }
 .tooltip .tt-meta { font-size: 11px; margin-top: 4px; }
 
 /* Detail panel */
@@ -211,8 +264,8 @@ a:hover { text-decoration: underline; }
   top: 0;
   width: 420px;
   height: 100%;
-  background: #161b22;
-  border-left: 1px solid #30363d;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
   transform: translateX(100%);
   transition: transform 0.25s ease;
   z-index: 50;
@@ -223,21 +276,21 @@ a:hover { text-decoration: underline; }
 .detail-panel.open { transform: translateX(0); }
 .detail-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
 }
-.detail-header h2 { font-size: 16px; color: #f0f6fc; }
+.detail-header h2 { font-size: 16px; color: var(--text-primary); }
 .detail-close {
   background: none;
   border: none;
-  color: #8b949e;
+  color: var(--text-muted);
   cursor: pointer;
   font-size: 20px;
   padding: 4px;
 }
-.detail-close:hover { color: #f0f6fc; }
+.detail-close:hover { color: var(--text-primary); }
 .detail-body {
   flex: 1;
   overflow-y: auto;
@@ -251,18 +304,18 @@ a:hover { text-decoration: underline; }
   line-height: 1.5;
 }
 .detail-body .msg.user {
-  background: #1f6feb22;
-  border: 1px solid #1f6feb33;
+  background: var(--btn-primary)22;
+  border: 1px solid var(--btn-primary)33;
 }
 .detail-body .msg.assistant {
-  background: #21262d;
-  border: 1px solid #30363d;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
 }
 .detail-body .msg .msg-role {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #8b949e;
+  color: var(--text-muted);
   margin-bottom: 4px;
 }
 .detail-body .msg .msg-content {
@@ -273,15 +326,15 @@ a:hover { text-decoration: underline; }
 }
 .detail-body .msg .msg-content::-webkit-scrollbar { width: 4px; }
 .detail-body .msg .msg-content::-webkit-scrollbar-track { background: transparent; }
-.detail-body .msg .msg-content::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+.detail-body .msg .msg-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 /* Legend */
 .legend {
   position: absolute;
   bottom: 16px;
   left: 16px;
-  background: #161b22ee;
-  border: 1px solid #30363d;
+  background: var(--bg-secondary)ee;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 11px;
@@ -306,9 +359,9 @@ a:hover { text-decoration: underline; }
   bottom: 16px;
   right: 16px;
   font-size: 11px;
-  color: #8b949e;
-  background: #161b22ee;
-  border: 1px solid #30363d;
+  color: var(--text-muted);
+  background: var(--bg-secondary)ee;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 12px;
   z-index: 10;
@@ -321,14 +374,14 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0d1117;
+  background: var(--bg-primary);
   z-index: 200;
 }
 .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #30363d;
-  border-top-color: #58a6ff;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -337,14 +390,114 @@ a:hover { text-decoration: underline; }
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
 /* Node type colors */
-.node-conversation { fill: #58a6ff; }
-.node-topic { fill: #3fb950; }
-.node-concept { fill: #d29922; }
-.node-intent { fill: #f85149; }
-.node-model { fill: #bc8cff; }
+.node-conversation { fill: var(--accent); }
+.node-topic { fill: var(--green); }
+.node-concept { fill: var(--yellow); }
+.node-intent { fill: var(--red); }
+.node-model { fill: var(--purple); }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: var(--shadow);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: auto; }
+.modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 520px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px var(--shadow);
+}
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-header h2 { font-size: 16px; color: var(--text-primary); }
+.modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+.modal-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.modal-tab {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.modal-tab:hover { color: var(--text-secondary); }
+.modal-tab.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+.modal textarea {
+  width: 100%;
+  min-height: 200px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  padding: 12px;
+  font-family: monospace;
+  font-size: 12px;
+  resize: vertical;
+  outline: none;
+}
+.modal textarea:focus { border-color: var(--accent); }
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: var(--btn-primary)11; }
+.drop-zone p { font-size: 14px; color: var(--text-muted); }
+.drop-zone .hint { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+.modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.btn {
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+.btn:hover { background: var(--border); }
+.btn-primary { background: var(--btn-primary); border-color: var(--btn-primary); color: #fff; }
+.btn-primary:hover { background: var(--btn-primary-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.modal-status {
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.modal-status.success { background: var(--green)22; color: var(--green); border: 1px solid var(--green)33; }
+.modal-status.error { background: var(--red)22; color: var(--red); border: 1px solid var(--red)33; }
+.modal-status.info { background: var(--accent)22; color: var(--accent); border: 1px solid var(--accent)33; }
 </style>
 </head>
 <body>
@@ -353,8 +506,16 @@ a:hover { text-decoration: underline; }
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <h1>LLM Queries Dashboard</h1>
-      <p>Knowledge graph of conversation history</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <h1>LLM Queries Dashboard</h1>
+          <p>Knowledge graph of conversation history</p>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button class="btn" style="padding:4px 8px;font-size:11px;" onclick="toggleTheme()" title="Toggle theme">🌓</button>
+          <button class="btn" style="padding:4px 8px;font-size:11px;" onclick="showImportModal()">+ Import</button>
+        </div>
+      </div>
     </div>
 
     <div class="stats-grid" id="stats">
@@ -407,6 +568,37 @@ a:hover { text-decoration: underline; }
   </main>
 </div>
 
+<!-- Import Modal -->
+<div class="modal-overlay" id="import-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Import Chat History</h2>
+      <button class="detail-close" onclick="closeImportModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="import-status"></div>
+      <div class="modal-tabs">
+        <div class="modal-tab active" data-tab="upload" onclick="switchImportTab('upload')">Upload File</div>
+        <div class="modal-tab" data-tab="paste" onclick="switchImportTab('paste')">Paste JSON</div>
+      </div>
+      <div id="import-tab-upload">
+        <div class="drop-zone" id="drop-zone">
+          <p>Drop a <code>.json</code> file here</p>
+          <p class="hint">or click to browse</p>
+        </div>
+        <input type="file" id="file-input" accept=".json" style="display:none" />
+      </div>
+      <div id="import-tab-paste" style="display:none;">
+        <textarea id="paste-area" placeholder='Paste your chat export JSON here...\n\nExpected format:\n{\n  "success": true,\n  "data": [...]\n}'></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeImportModal()">Cancel</button>
+      <button class="btn btn-primary" id="import-btn" onclick="submitImport()">Import</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ────────────────────────────────────────────────────────────────
 let graphData = null;
@@ -432,20 +624,20 @@ function render() {
 }
 
 function renderStats() {
-  const s = graphData.stats;
-  document.getElementById('stat-convs').textContent = s.conversations;
-  document.getElementById('stat-topics').textContent = s.topics;
-  document.getElementById('stat-concepts').textContent = s.concepts;
-  document.getElementById('stat-models').textContent = s.models.length;
+  const s = graphData.stats || {};
+  document.getElementById('stat-convs').textContent = s.conversations ?? 0;
+  document.getElementById('stat-topics').textContent = s.topics ?? 0;
+  document.getElementById('stat-concepts').textContent = s.concepts ?? 0;
+  document.getElementById('stat-models').textContent = (s.models || []).length;
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────
 function renderFilters() {
   const intents = new Set();
   const models = new Set();
-  for (const c of graphData.conversations) {
+  for (const c of graphData.conversations||[]) {
     if (c.intent) intents.add(c.intent);
-    for (const m of c.models) models.add(m);
+    for (const m of c.models||[]) models.add(m);
   }
 
   renderTagGroup('intent-tags', [...intents].sort(), 'intent');
@@ -477,13 +669,14 @@ function renderTagGroup(containerId, items, type) {
 }
 
 function refreshFilters() {
+  const convs = graphData.conversations || [];
   document.querySelectorAll('#intent-tags .filter-tag').forEach((el, i) => {
-    const items = [...new Set(graphData.conversations.map(c => c.intent))].sort();
+    const items = [...new Set(convs.map(c => c.intent))].sort();
     if (i === 0) el.className = 'filter-tag' + (activeFilters.intent.size === 0 ? ' active' : '');
     else el.className = 'filter-tag' + (activeFilters.intent.has(items[i-1]) ? ' active' : '');
   });
   document.querySelectorAll('#model-tags .filter-tag').forEach((el, i) => {
-    const items = [...new Set(graphData.conversations.flatMap(c => c.models))].sort();
+    const items = [...new Set(convs.flatMap(c => c.models||[]))].sort();
     if (i === 0) el.className = 'filter-tag' + (activeFilters.model.size === 0 ? ' active' : '');
     else el.className = 'filter-tag' + (activeFilters.model.has(items[i-1]) ? ' active' : '');
   });
@@ -501,13 +694,13 @@ function renderConvList() {
     item.className = 'conv-item' + (c.id === selectedConvId ? ' active' : '');
     item.dataset.convId = c.id;
     item.innerHTML = `
-      <h4>${esc(c.title)}</h4>
+      <h4>${esc(c.title||'')}</h4>
       <div class="conv-meta">
-        <span>${c.model}</span>
-        <span class="tag-small">${c.intent}</span>
-        ${c.topics.slice(0, 2).map(t => `<span class="tag-small">${esc(t)}</span>`).join('')}
+        <span>${c.model||'--'}</span>
+        <span class="tag-small">${c.intent||'?'}</span>
+        ${(c.topics||[]).slice(0, 2).map(t => `<span class="tag-small">${esc(t||'')}</span>`).join('')}
       </div>
-      <div class="conv-summary">${esc(c.summary)}</div>
+      <div class="conv-summary">${esc(c.summary||'')}</div>
     `;
     item.onclick = () => selectConversation(c.id);
     list.appendChild(item);
@@ -515,20 +708,20 @@ function renderConvList() {
 }
 
 function getFilteredConvs() {
-  let convs = graphData.conversations;
+  let convs = graphData.conversations || [];
   if (activeFilters.intent.size > 0) {
     convs = convs.filter(c => activeFilters.intent.has(c.intent));
   }
   if (activeFilters.model.size > 0) {
-    convs = convs.filter(c => c.models.some(m => activeFilters.model.has(m)));
+    convs = convs.filter(c => (c.models||[]).some(m => activeFilters.model.has(m)));
   }
   if (searchTerm) {
     const t = searchTerm.toLowerCase();
     convs = convs.filter(c =>
-      c.title.toLowerCase().includes(t) ||
-      c.summary.toLowerCase().includes(t) ||
-      c.topics.some(tp => tp.toLowerCase().includes(t)) ||
-      c.concepts.some(cp => cp.toLowerCase().includes(t))
+      (c.title||'').toLowerCase().includes(t) ||
+      (c.summary||'').toLowerCase().includes(t) ||
+      (c.topics||[]).some(tp => (tp||'').toLowerCase().includes(t)) ||
+      (c.concepts||[]).some(cp => (cp||'').toLowerCase().includes(t))
     );
   }
   return convs;
@@ -576,7 +769,7 @@ function renderGraph() {
     .selectAll('line')
     .data(links)
     .join('line')
-    .attr('stroke', '#30363d')
+    .attr('stroke', 'var(--border)')
     .attr('stroke-width', 1)
     .attr('stroke-opacity', 0.4);
 
@@ -587,7 +780,7 @@ function renderGraph() {
     .join('circle')
     .attr('r', d => d.r)
     .attr('fill', d => getNodeColor(d))
-    .attr('stroke', '#0d1117')
+    .attr('stroke', 'var(--bg-primary)')
     .attr('stroke-width', 1.5)
     .attr('opacity', d => isNodeVisible(d) ? 1 : 0.08)
     .style('cursor', 'pointer')
@@ -621,9 +814,9 @@ function renderGraph() {
     .selectAll('text')
     .data(nodes)
     .join('text')
-    .text(d => d.label.length > 20 ? d.label.slice(0, 18) + '..' : d.label)
+    .text(d => (d.label||'').length > 20 ? (d.label||'').slice(0, 18) + '..' : d.label||'')
     .attr('font-size', d => Math.max(8, d.r * 0.5))
-    .attr('fill', '#8b949e')
+    .attr('fill', 'var(--text-muted)')
     .attr('text-anchor', 'middle')
     .attr('dy', d => d.r + 12)
     .attr('opacity', d => isNodeVisible(d) ? 0.8 : 0);
@@ -633,9 +826,9 @@ function renderGraph() {
     .selectAll('text.title-label')
     .data(nodes.filter(d => d.nodeType === 'conversation'))
     .join('text')
-    .text(d => d.label.length > 25 ? d.label.slice(0, 23) + '..' : d.label)
+    .text(d => (d.label||'').length > 25 ? (d.label||'').slice(0, 23) + '..' : d.label||'')
     .attr('font-size', 7)
-    .attr('fill', '#58a6ff')
+    .attr('fill', 'var(--accent)')
     .attr('text-anchor', 'middle')
     .attr('dy', d => -(getNodeRadius(d) + 2))
     .attr('opacity', d => isNodeVisible(d) ? 0.9 : 0);
@@ -676,12 +869,12 @@ function getNodeType(n) {
 
 function getNodeColor(d) {
   switch (d.nodeType) {
-    case 'conversation': return '#58a6ff';
-    case 'topic': return '#3fb950';
-    case 'concept': return '#d29922';
-    case 'intent': return '#f85149';
-    case 'model': return '#bc8cff';
-    default: return '#8b949e';
+    case 'conversation': return 'var(--accent)';
+    case 'topic': return 'var(--green)';
+    case 'concept': return 'var(--yellow)';
+    case 'intent': return 'var(--red)';
+    case 'model': return 'var(--purple)';
+    default: return 'var(--text-muted)';
   }
 }
 
@@ -727,7 +920,7 @@ function showTooltip(event, d) {
     if (conv) {
       html += `<p>${esc(conv.summary)}</p>`;
       html += `<p class="tt-meta">Model: ${conv.model} · Intent: ${conv.intent}</p>`;
-      if (conv.topics.length) html += `<p class="tt-meta">Topics: ${conv.topics.join(', ')}</p>`;
+      if ((conv.topics||[]).length) html += `<p class="tt-meta">Topics: ${conv.topics.join(', ')}</p>`;
     }
   } else if (d.definition) {
     html += `<p>${esc(d.definition)}</p>`;
@@ -760,7 +953,7 @@ async function selectConversation(convId) {
     const resp = await fetch(`/api/conversation/${convId}`);
     const data = await resp.json();
     title.textContent = data.title || 'Conversation';
-    body.innerHTML = '<div style="margin-bottom:12px;font-size:12px;color:#8b949e;">' +
+    body.innerHTML = '<div style="margin-bottom:12px;font-size:12px;color:var(--text-muted);">' +
       `Model: ${(data.models||[]).join(', ')} · ${new Date(data.created_at * 1000).toLocaleDateString()}</div>`;
     for (const msg of data.messages) {
       const div = document.createElement('div');
@@ -771,7 +964,7 @@ async function selectConversation(convId) {
       body.appendChild(div);
     }
   } catch (e) {
-    body.innerHTML = '<p style="color:#f85149;">Failed to load conversation.</p>';
+    body.innerHTML = '<p style="color:var(--red);">Failed to load conversation.</p>';
   }
 }
 
@@ -788,6 +981,135 @@ document.getElementById('search').addEventListener('input', (e) => {
   updateGraphVisibility();
 });
 
+// ── Theme ─────────────────────────────────────────────────────────────────
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('hive-theme', theme);
+}
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  setTheme(current === 'dark' ? 'light' : 'dark');
+}
+(function initTheme() {
+  const saved = localStorage.getItem('hive-theme') || 'dark';
+  setTheme(saved);
+})();
+
+// ── Import Modal ──────────────────────────────────────────────────────────
+let importFile = null;
+
+function showImportModal() {
+  document.getElementById('import-modal').classList.add('open');
+  importFile = null;
+  document.getElementById('import-status').innerHTML = '';
+  document.getElementById('paste-area').value = '';
+  document.getElementById('import-btn').disabled = false;
+  document.getElementById('import-btn').textContent = 'Import';
+}
+
+function closeImportModal() {
+  document.getElementById('import-modal').classList.remove('open');
+}
+
+function switchImportTab(tab) {
+  document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.modal-tab[data-tab="${tab}"]`).classList.add('active');
+  document.getElementById('import-tab-upload').style.display = tab === 'upload' ? '' : 'none';
+  document.getElementById('import-tab-paste').style.display = tab === 'paste' ? '' : 'none';
+}
+
+// Drop zone
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleImportFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files.length) handleImportFile(e.target.files[0]);
+});
+
+function handleImportFile(file) {
+  if (!file.name.endsWith('.json')) {
+    setImportStatus('Please select a .json file.', 'error');
+    return;
+  }
+  importFile = file;
+  setImportStatus(`Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`, 'info');
+}
+
+function setImportStatus(msg, type) {
+  const el = document.getElementById('import-status');
+  if (!msg) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="modal-status ${type}">${esc(msg)}</div>`;
+}
+
+async function submitImport() {
+  const btn = document.getElementById('import-btn');
+  btn.disabled = true;
+  btn.textContent = 'Importing...';
+
+  const activeTab = document.querySelector('.modal-tab.active');
+  const tab = activeTab ? activeTab.dataset.tab : 'upload';
+
+  try {
+    let body;
+    if (tab === 'upload' && importFile) {
+      const form = new FormData();
+      form.append('file', importFile);
+      body = form;
+    } else if (tab === 'paste') {
+      const text = document.getElementById('paste-area').value.trim();
+      if (!text) { setImportStatus('Paste some JSON first.', 'error'); btn.disabled = false; btn.textContent = 'Import'; return; }
+      body = text;
+    } else {
+      setImportStatus('Select a file or paste JSON.', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Import';
+      return;
+    }
+
+    const opts = { method: 'POST' };
+    if (typeof body === 'string') {
+      opts.headers = { 'Content-Type': 'application/json' };
+      opts.body = body;
+    } else {
+      opts.body = body;
+    }
+
+    const resp = await fetch('/api/import-json', opts);
+    const result = await resp.json();
+
+    if (!resp.ok) {
+      setImportStatus(result.error || 'Import failed', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Import';
+      return;
+    }
+
+    const count = result.conversations ?? result?.stats?.conversations ?? 0;
+    setImportStatus(`Imported ${count} conversations. Reloading...`, 'success');
+
+    // Reload graph data
+    graphData = await (await fetch('/api/graph?force=1')).json();
+    if (graphData && graphData.nodes) {
+      render();
+      closeImportModal();
+    } else {
+      setImportStatus('Graph rebuild in progress, refreshing...', 'info');
+      setTimeout(() => location.reload(), 2000);
+    }
+  } catch (e) {
+    setImportStatus(e.message || 'Import failed', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Import';
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 function esc(s) {
   if (!s) return '';
@@ -800,10 +1122,10 @@ function esc(s) {
 loadData().catch(err => {
   console.error('Dashboard error:', err);
   document.getElementById('loading').innerHTML =
-    `<div style="color:#f85149;text-align:center;padding:40px;">
+    `<div style="color:var(--red);text-align:center;padding:40px;">
       <h3>Failed to load dashboard</h3>
       <p style="margin-top:8px;font-size:13px;">${esc(err.message || String(err))}</p>
-      <button onclick="location.reload()" style="margin-top:16px;padding:8px 20px;border:1px solid #30363d;border-radius:6px;background:#21262d;color:#c9d1d9;cursor:pointer;">Retry</button>
+      <button onclick="location.reload()" style="margin-top:16px;padding:8px 20px;border:1px solid var(--border);border-radius:6px;background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;">Retry</button>
     </div>`;
 });
 </script>

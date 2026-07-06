@@ -25,8 +25,8 @@ app = Flask(__name__)
 
 CHAT_HISTORY_PATH = Path(__file__).parent / "chatHistory"
 CACHE_PATH = Path(__file__).parent / ".extraction_cache.json"
-OLLAMA_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL = "llama3.2:3b"
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 MAX_WORKERS = 6
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -195,10 +195,12 @@ def build_knowledge_graph(convs: list[dict]) -> dict:
 
         extraction = cache.get(conv_id, {})
 
-        conv_topics = extraction.get("topics", [])
-        conv_concepts = extraction.get("concepts", [])
+        conv_topics = _normalize_str_items(extraction.get("topics", []))
+        conv_concepts = _normalize_str_items(extraction.get("concepts", []))
         conv_intent = extraction.get("intent", "other")
-        conv_tags = extraction.get("tags", [])
+        if isinstance(conv_intent, dict):
+            conv_intent = str(conv_intent)
+        conv_tags = _normalize_str_items(extraction.get("tags", []))
         conv_summary = extraction.get("summary", title)
 
         for t in conv_topics:
@@ -374,6 +376,77 @@ def api_conversation(conv_id: str):
 def api_refresh():
     get_graph_data(force=True)
     return jsonify({"status": "ok"})
+
+
+@app.route("/api/import-json", methods=["POST"])
+def api_import_json():
+    """Import a chat-history JSON file (upload or paste)."""
+    try:
+        raw = None
+        submitted_filename = None
+
+        # File upload via multipart
+        if request.files:
+            file = request.files.get("file")
+            if file:
+                raw = file.read().decode("utf-8")
+                submitted_filename = file.filename or "upload.json"
+
+        # Pasted JSON via request body
+        if raw is None:
+            raw = request.get_data(as_text=True)
+            submitted_filename = "pasted.json"
+
+        if not raw:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        data = json.loads(raw)
+
+        # Validate — expect a dict with a "data" key (list) or a top-level list
+        if isinstance(data, dict) and "data" in data:
+            if not isinstance(data["data"], list):
+                return jsonify({"error": "Expected 'data' to be a list"}), 400
+        elif isinstance(data, list):
+            data = {"success": True, "data": data}
+        else:
+            return jsonify({"error": "Expected a JSON object with a 'data' array, or a top-level array"}), 400
+
+        # Save to chatHistory
+        stem = Path(submitted_filename).stem
+        timestamp = int(time.time())
+        out_path = CHAT_HISTORY_PATH / f"chat-export-{timestamp}.json"
+        with open(out_path, "w") as f:
+            json.dump(data, f, indent=2)
+
+        # Invalidate graph cache so it reloads all chat files
+        global _graph_data
+        _graph_data = None
+        graph = get_graph_data(force=True)
+
+        return jsonify({
+            "status": "ok",
+            "filename": out_path.name,
+            "conversations": len(graph.get("conversations", [])),
+            "stats": graph.get("stats", {}),
+        })
+
+    except json.JSONDecodeError:
+        return jsonify({"error": "Invalid JSON"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chat-files")
+def api_chat_files():
+    """List available chat history files."""
+    files = []
+    for f in sorted(CHAT_HISTORY_PATH.glob("*.json"), reverse=True):
+        files.append({
+            "name": f.name,
+            "size": f.stat().st_size,
+            "modified": f.stat().st_mtime,
+        })
+    return jsonify(files)
 
 
 # ── Main ───────────────────────────────────────────────────────────────────
