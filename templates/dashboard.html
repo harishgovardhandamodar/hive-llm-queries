@@ -1189,13 +1189,14 @@ function getNodeRadius(d) {
 }
 
 // ── Subgraph with 3-level drill-down ────────────────────────────────────
-let sgState = { view: 'overview', intentKey: null, subIntentKey: null, data: null };
+let sgState = { view: 'overview', intentKey: null, subIntentKey: null, data: null, topicFilter: '' };
 
 function renderSubgraph(data, viewport) {
   sgState.data = data;
   sgState.view = 'overview';
   sgState.intentKey = null;
   sgState.subIntentKey = null;
+  sgState.topicFilter = '';
   renderSGView(viewport);
 }
 
@@ -1221,13 +1222,48 @@ function renderSGView(viewport) {
   }
 }
 
-function renderSGOverview(data, viewport, w, h) {
-  const graphH = Math.floor(h * 0.45);
-  const panelH = h - graphH;
-  const conv = data.conversation || {};
-  const groups = data.message_groups || {};
+function getFilteredGroups(groups, topicFilter) {
+  if (!topicFilter) return groups;
+  const result = {};
+  for (const [key, g] of Object.entries(groups)) {
+    const msgs = g.queries || g || [];
+    const matching = msgs.filter(m => (m.topics||[]).some(t => t.toLowerCase().includes(topicFilter.toLowerCase())));
+    if (matching.length > 0) {
+      result[key] = { ...g, queries: matching, count: matching.length };
+    }
+  }
+  return result;
+}
 
-  // ── Overview graph: only conv + intents + summary ──
+function renderSGOverview(data, viewport, w, h) {
+  const graphH = Math.floor(h * 0.4);
+  const filterH = 32;
+  const panelH = h - graphH - filterH;
+  const conv = data.conversation || {};
+  const allGroups = data.message_groups || {};
+  const groups = getFilteredGroups(allGroups, sgState.topicFilter);
+
+  // ── Topic filter bar ──
+  const allTopics = new Set();
+  for (const g of Object.values(allGroups)) {
+    const msgs = g.queries || g || [];
+    for (const m of msgs) {
+      for (const t of (m.topics||[])) allTopics.add(t);
+    }
+  }
+  const filterBar = d3.select(viewport).append('div')
+    .style('display','flex').style('gap','4px').style('padding','4px 12px')
+    .style('background','var(--bg-secondary)').style('border-bottom','1px solid var(--border)')
+    .style('height', filterH + 'px').style('align-items','center').style('overflow-x','auto');
+  filterBar.append('span').text('Topics:').style('color','var(--text-muted)').style('font-size','11px').style('margin-right','4px');
+  const allChip = filterBar.append('span').attr('class','filter-tag' + (sgState.topicFilter ? '' : ' active'))
+    .text('All').on('click', () => { sgState.topicFilter = ''; renderSGView(viewport); });
+  for (const t of [...allTopics].sort()) {
+    filterBar.append('span').attr('class','filter-tag' + (sgState.topicFilter === t ? ' active' : ''))
+      .text(t).on('click', () => { sgState.topicFilter = sgState.topicFilter === t ? '' : t; renderSGView(viewport); });
+  }
+
+  // ── Overview graph ──
   const svg = d3.select(viewport).append('svg').attr('width', w).attr('height', graphH).style('display', 'block');
   const g = svg.append('g');
   const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', (ev) => g.attr('transform', ev.transform));
@@ -1235,8 +1271,8 @@ function renderSGOverview(data, viewport, w, h) {
 
   const convNode = { id: `conv_${conv.id}`, label: conv.title || 'Conversation', nodeType: 'conversation', r: 20 };
   const intentNodes = Object.keys(groups).map(k => {
-    const g = groups[k];
-    const cnt = typeof g === 'object' && g.count !== undefined ? g.count : (Array.isArray(g) ? g.length : 0);
+    const grp = groups[k];
+    const cnt = typeof grp === 'object' && grp.count !== undefined ? grp.count : (Array.isArray(grp) ? grp.length : 0);
     return { id: `intent_${k}`, label: k, nodeType: 'intent', r: 14, _intentKey: k, _msgCount: cnt };
   });
   const topicNodes = (conv.topics || []).map(t => ({
@@ -1356,6 +1392,9 @@ function renderSGIntent(data, viewport, w, h) {
     msgs = group.queries || group || [];
     col = intentColor(intentKey);
     parentForBreadcrumb = null;
+  }
+  if (sgState.topicFilter && Array.isArray(msgs)) {
+    msgs = msgs.filter(m => (m.topics||[]).some(t => t.toLowerCase().includes(sgState.topicFilter.toLowerCase())));
   }
 
   // ── Breadcrumb bar ──

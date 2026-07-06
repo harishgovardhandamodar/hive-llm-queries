@@ -665,6 +665,95 @@ def api_cross_intents():
     })
 
 
+@app.route("/api/knowledge-store/status")
+def api_ks_status():
+    """Knowledge store build status and stats."""
+    from knowledge_store import load_summary
+    return jsonify(load_summary() or {"status": "not_built"})
+
+
+@app.route("/api/knowledge-store/build", methods=["POST"])
+def api_ks_build():
+    """Build/rebuild the full knowledge store."""
+    from knowledge_store import build_knowledge_store
+    from intent_engine import get_embeddings
+
+    convs = load_chat_data()
+    cache = build_cache()
+    stats = build_knowledge_store(
+        convs, get_user_queries_and_answers, cache, get_embeddings, _current_model
+    )
+    return jsonify(stats)
+
+
+@app.route("/api/knowledge-store/search")
+def api_ks_search():
+    """Semantic search across all indexed queries."""
+    from knowledge_store import VectorIndex
+    from intent_engine import get_embeddings
+
+    q = request.args.get("q", "")
+    top_k = int(request.args.get("top_k", "20"))
+    if not q:
+        return jsonify({"error": "Missing 'q' parameter"}), 400
+
+    vi = VectorIndex()
+    results = vi.search_by_text(q, get_embeddings, top_k=top_k)
+    return jsonify({"query": q, "results": results, "total_indexed": vi.count()})
+
+
+@app.route("/api/knowledge-store/entity/<entity_type>")
+def api_ks_entities(entity_type: str):
+    """List entities of a given type (topics, concepts, intents)."""
+    from knowledge_store import EntityRegistry
+    er = EntityRegistry()
+    min_count = int(request.args.get("min_count", "1"))
+    entities = er.get_by_type(entity_type, min_count)
+    return jsonify({"type": entity_type, "count": len(entities), "entities": entities})
+
+
+@app.route("/api/knowledge-store/graph/<node_id>")
+def api_ks_graph_node(node_id: str):
+    """Get a node and its neighbors from the knowledge graph."""
+    from knowledge_store import GraphIndex
+    gi = GraphIndex()
+    depth = int(request.args.get("depth", "1"))
+    node = gi.get_node(node_id)
+    if not node:
+        return jsonify({"error": "not found"}), 404
+    neighbors = gi.get_neighbors(node_id, max_depth=depth)
+    return jsonify({
+        "node": {"id": node_id, **node},
+        "neighbors": neighbors,
+        "neighbor_count": len(neighbors),
+    })
+
+
+@app.route("/api/knowledge-store/related")
+def api_ks_related():
+    """Find related entities across conversations."""
+    from knowledge_store import EntityRegistry
+    from intent_engine import get_embeddings
+
+    etype = request.args.get("type", "topics")
+    name = request.args.get("name", "")
+    if not name:
+        return jsonify({"error": "Missing 'name'"}), 400
+
+    er = EntityRegistry()
+    all_entities = er.get_by_type(etype)
+    target = [e for e in all_entities if e.get("name", "").lower() == name.lower()]
+    if not target:
+        return jsonify({"error": "entity not found"}), 404
+
+    related = target[0].get("related", {})
+    return jsonify({
+        "entity": target[0],
+        "related_count": len(related),
+        "related": related,
+    })
+
+
 # ── Main ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

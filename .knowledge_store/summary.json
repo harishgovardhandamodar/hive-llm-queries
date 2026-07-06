@@ -1,0 +1,9 @@
+{
+  "conversations": 34,
+  "queries_indexed": 6659,
+  "vector_entries": 6659,
+  "graph_nodes": 17579,
+  "graph_edges": 30892,
+  "entities": 4227,
+  "build_time_s": 246.8
+}
