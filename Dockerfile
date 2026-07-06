@@ -4,14 +4,18 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir flask requests
 
-COPY app.py .
+COPY app.py intent_engine.py knowledge_store.py prebuild_cache.py ./
 COPY templates/ templates/
 COPY static/ static/
-COPY prebuild_cache.py .
+
+RUN mkdir -p chatHistory .intent_cache .knowledge_store
 
 EXPOSE 5001
 
 ENV FLASK_RUN_HOST=0.0.0.0
 ENV OLLAMA_URL=http://host.docker.internal:11434/api/generate
+ENV OLLAMA_MODEL=llama3.2:3b
+ENV EMBED_URL=http://host.docker.internal:11434/api/embed
+ENV LABEL_URL=http://host.docker.internal:11434/api/chat
 
 CMD ["python3", "app.py"]

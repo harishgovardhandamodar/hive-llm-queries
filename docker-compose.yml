@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   dashboard:
     build: .
@@ -8,9 +6,14 @@ services:
       - "5001:5001"
     volumes:
       - ./chatHistory:/app/chatHistory
+      - .intent_cache:/app/.intent_cache
+      - .knowledge_store:/app/.knowledge_store
       - ./.extraction_cache.json:/app/.extraction_cache.json
     environment:
       - OLLAMA_URL=http://host.docker.internal:11434/api/generate
+      - EMBED_URL=http://host.docker.internal:11434/api/embed
+      - LABEL_URL=http://host.docker.internal:11434/api/chat
+      - OLLAMA_MODEL=llama3.2:3b
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

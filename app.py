@@ -19,7 +19,6 @@ from typing import Any
 import requests
 from flask import Flask, jsonify, render_template, request
 
-sys.path.insert(0, "/Users/harishgovardhandamodar/codebase/hive-datatype")
 from hive_datatype import HiveGraph, Node, NodeType, Edge
 
 from intent_engine import discover_intents_deep
