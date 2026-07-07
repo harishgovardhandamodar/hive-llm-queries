@@ -180,6 +180,31 @@ a:hover { text-decoration: underline; }
 }
 .search-box input:focus { border-color: var(--accent); }
 
+/* Sidebar tab bar */
+.sidebar-tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  align-items: center;
+  padding: 0 8px;
+  background: var(--bg-secondary);
+}
+.sidebar-tab {
+  flex: 1;
+  padding: 7px 8px;
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  user-select: none;
+}
+.sidebar-tab:hover { color: var(--text-secondary); }
+.sidebar-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
 /* Conversation list */
 .conv-list {
   flex: 1;
@@ -1180,14 +1205,14 @@ a:hover { text-decoration: underline; }
       <div style="display:flex;gap:4px;margin-top:4px;" id="analysis-model-selector"></div>
     </div>
 
-    <div style="display:flex;align-items:center;gap:4px;padding:6px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
-      <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.3px;color:var(--text-muted);">Notes</span>
-      <span style="font-size:10px;color:var(--text-dim);" id="notes-badge"></span>
-      <span style="flex:1"></span>
-      <button class="btn" style="font-size:11px;padding:3px 8px;" onclick="showNoteModal()">+ New Note</button>
+    <div class="sidebar-tab-bar">
+      <span class="sidebar-tab active" data-sidebar-tab="convs" onclick="switchSidebarTab('convs')">Conversations</span>
+      <span class="sidebar-tab" data-sidebar-tab="notes" onclick="switchSidebarTab('notes')">Notes <span id="notes-badge" style="font-weight:400;color:var(--text-dim);font-size:10px;"></span></span>
+      <button class="btn sidebar-note-btn" onclick="showNoteModal()" title="New Note" style="font-size:15px;padding:2px 8px;margin-left:auto;flex:none;">+</button>
     </div>
 
-    <div class="notes-panel" id="notes-panel" style="flex:1;overflow-y:auto;padding:4px 0;"></div>
+    <div class="conv-list" id="conv-list" style="display:block;"></div>
+    <div class="notes-panel" id="notes-panel" style="display:none;flex:1;overflow-y:auto;padding:4px 0;"></div>
   </aside>
 
   <!-- Main -->
@@ -1443,7 +1468,6 @@ function refreshFilters() {
 // ── Conversation list ─────────────────────────────────────────────────────
 function renderConvList() {
   const list = document.getElementById('conv-list');
-  if (!list) return;
   list.innerHTML = '';
   const filtered = getFilteredConvs();
   for (const c of filtered) {
@@ -2748,6 +2772,14 @@ function esc(s) {
 }
 
 // ── Journal Notes ────────────────────────────────────────────────────────────
+function switchSidebarTab(tab) {
+  document.querySelectorAll('.sidebar-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.getElementById('conv-list').style.display = tab === 'convs' ? 'block' : 'none';
+  document.getElementById('notes-panel').style.display = tab === 'notes' ? 'block' : 'none';
+  var activeTab = document.querySelector('.sidebar-tab[data-sidebar-tab="' + tab + '"]');
+  if (activeTab) activeTab.classList.add('active');
+}
+
 var noteLinks = [];
 
 function showNoteModal() {
