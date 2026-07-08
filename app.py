@@ -936,6 +936,117 @@ def api_note_detail(note_id: str):
     return jsonify({"error": "not found"}), 404
 
 
+# ── OneNote Import ───────────────────────────────────────────────────────────
+
+@app.route("/api/onenote/auth")
+def api_onenote_auth():
+    from onenote_import import build_auth_url
+    url = build_auth_url()
+    if not url:
+        return jsonify({"error": "MSAL not installed"}), 500
+    return jsonify({"auth_url": url})
+
+
+@app.route("/api/onenote/auth/callback")
+def api_onenote_callback():
+    from onenote_import import exchange_code
+    code = request.args.get("code", "")
+    if not code:
+        return "<h2>Authentication failed</h2><p>No code received.</p>"
+    result = exchange_code(code)
+    if result:
+        return "<h2>Authentication successful!</h2><p>You can close this window and return to the dashboard.</p>"
+    return "<h2>Authentication failed</h2><p>Could not exchange code for token.</p>"
+
+
+@app.route("/api/onenote/auth/status")
+def api_onenote_auth_status():
+    from onenote_import import get_access_token, load_tokens
+    token = get_access_token()
+    tokens = load_tokens()
+    user = (tokens or {}).get("user", {})
+    return jsonify({
+        "authenticated": token is not None,
+        "user": user.get("name", "") if user else "",
+        "email": user.get("preferred_username", "") if user else "",
+    })
+
+
+@app.route("/api/onenote/auth/logout", methods=["POST"])
+def api_onenote_logout():
+    from onenote_import import clear_tokens
+    clear_tokens()
+    return jsonify({"status": "logged_out"})
+
+
+@app.route("/api/onenote/notebooks")
+def api_onenote_notebooks():
+    from onenote_import import list_notebooks, get_access_token
+    if not get_access_token():
+        return jsonify({"error": "not authenticated"}), 401
+    notebooks = list_notebooks()
+    return jsonify(notebooks)
+
+
+@app.route("/api/onenote/notebooks/<notebook_id>/sections")
+def api_onenote_notebook_sections(notebook_id: str):
+    from onenote_import import list_notebook_sections, get_access_token
+    if not get_access_token():
+        return jsonify({"error": "not authenticated"}), 401
+    sections = list_notebook_sections(notebook_id)
+    return jsonify(sections)
+
+
+@app.route("/api/onenote/sections/<section_id>/pages")
+def api_onenote_section_pages(section_id: str):
+    from onenote_import import list_section_pages, get_access_token
+    if not get_access_token():
+        return jsonify({"error": "not authenticated"}), 401
+    pages = list_section_pages(section_id)
+    return jsonify(pages)
+
+
+@app.route("/api/onenote/import", methods=["POST"])
+def api_onenote_import():
+    from onenote_import import import_section, import_onepkg, get_access_token
+    data = request.json or {}
+    section_ids = data.get("section_ids", [])
+    model = data.get("model", _current_model)
+
+    if data.get("source") == "onepkg":
+        return jsonify({"error": "Use POST /api/onenote/import/onepkg for .onepkg files"}), 400
+
+    if not section_ids:
+        return jsonify({"error": "No sections specified"}), 400
+    if not get_access_token():
+        return jsonify({"error": "not authenticated"}), 401
+
+    results = []
+    for sid in section_ids:
+        result = import_section(sid, f"section_{sid[:8]}", model=model)
+        results.append(result)
+    total = sum(r.get("imported", 0) for r in results)
+    return jsonify({"status": "done", "total_imported": total, "sections": results})
+
+
+@app.route("/api/onenote/import/onepkg", methods=["POST"])
+def api_onenote_import_onepkg():
+    from onenote_import import import_onepkg
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    file = request.files["file"]
+    if not file.filename.lower().endswith(".onepkg"):
+        return jsonify({"error": "File must be .onepkg format"}), 400
+    result = import_onepkg(file.read(), model=_current_model)
+    return jsonify(result)
+
+
+@app.route("/api/onenote/import/status")
+def api_onenote_import_status():
+    from onenote_import import get_import_progress
+    return jsonify(get_import_progress())
+
+
 # ── Main ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

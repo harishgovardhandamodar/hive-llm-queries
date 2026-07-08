@@ -665,6 +665,26 @@ a:hover { text-decoration: underline; }
 .modal-status.error { background: var(--red)22; color: var(--red); border: 1px solid var(--red)33; }
 .modal-status.info { background: var(--accent)22; color: var(--accent); border: 1px solid var(--accent)33; }
 
+.onenote-step-header { font-size:14px;font-weight:600;color:var(--text-primary); }
+.onenote-step { animation: fadeIn 0.2s; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+.onenote-item {
+  padding:10px 14px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  margin-bottom:6px;
+  cursor:pointer;
+  transition:all 0.15s;
+  font-size:13px;
+  color:var(--text-secondary);
+}
+.onenote-item:hover { border-color:var(--accent);background:var(--accent-bg); }
+.onenote-item.selected { border-color:var(--accent);background:var(--accent-bg); }
+.onenote-item .onenote-item-detail { font-size:11px;color:var(--text-dim);margin-top:2px; }
+#onenote-sections-list .onenote-item { cursor:default; }
+#onenote-sections-list .onenote-item label { cursor:pointer;display:flex;align-items:center;gap:8px; }
+#onenote-sections-list .onenote-item input[type="checkbox"] { accent-color:var(--accent); }
+
 /* ── Cluster View ─────────────────────────────────────────────────────── */
 .cluster-build-bar {
   padding: 8px 16px;
@@ -1209,7 +1229,9 @@ a:hover { text-decoration: underline; }
     <div class="sidebar-tab-bar">
       <span class="sidebar-tab active" data-sidebar-tab="convs" onclick="switchSidebarTab('convs')">Conversations</span>
       <span class="sidebar-tab" data-sidebar-tab="notes" onclick="switchSidebarTab('notes')">Notes <span id="notes-badge" style="font-weight:400;color:var(--text-dim);font-size:10px;"></span></span>
-      <button class="btn sidebar-note-btn" onclick="showNoteModal()" title="New Note" style="font-size:15px;padding:2px 8px;margin-left:auto;flex:none;">+</button>
+      <span style="flex:1"></span>
+      <button class="btn sidebar-note-btn" onclick="showNoteModal()" title="New Note" style="font-size:15px;padding:2px 8px;flex:none;">+</button>
+      <button class="btn" onclick="showOneNoteImport()" title="Import from OneNote" style="font-size:11px;padding:2px 6px;flex:none;margin-left:2px;">📓</button>
     </div>
 
     <div class="conv-list" id="conv-list" style="display:block;"></div>
@@ -1322,6 +1344,104 @@ a:hover { text-decoration: underline; }
     <div class="modal-footer">
       <button class="btn" onclick="closeNoteModal()">Cancel</button>
       <button class="btn btn-primary" id="note-save-btn" onclick="saveNote()">Save Note</button>
+    </div>
+  </div>
+</div>
+
+<!-- OneNote Import Modal -->
+<div class="modal-overlay" id="onenote-modal">
+  <div class="modal" style="width:560px;">
+    <div class="modal-header">
+      <h2>Import from OneNote</h2>
+      <button class="detail-close" onclick="closeOneNoteModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="onenote-status"></div>
+      <div class="modal-tabs">
+        <div class="modal-tab active" data-onenote-tab="online" onclick="switchOneNoteTab('online')">OneNote Online</div>
+        <div class="modal-tab" data-onenote-tab="onepkg" onclick="switchOneNoteTab('onepkg')">Upload .onepkg</div>
+      </div>
+
+      <!-- Online wizard -->
+      <div id="onenote-tab-online">
+        <div id="onenote-step-connect" class="onenote-step">
+          <div class="onenote-step-header">Step 1: Connect to OneNote</div>
+          <p style="font-size:13px;color:var(--text-muted);margin:8px 0 16px;">
+            Sign in with your Microsoft account to access your OneNote notebooks.
+          </p>
+          <button class="btn btn-primary" id="onenote-connect-btn" onclick="onenoteConnect()">Connect to OneNote</button>
+          <div id="onenote-user-info" style="display:none;">
+            <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg-tertiary);border-radius:8px;margin-top:8px;">
+              <span style="font-size:18px;">👤</span>
+              <div><div id="onenote-user-name" style="font-size:13px;color:var(--text-primary);"></div><div id="onenote-user-email" style="font-size:11px;color:var(--text-muted);"></div></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;">
+              <button class="btn btn-primary" id="onenote-next-step2-btn" onclick="onenoteLoadNotebooks()">Next: Select Notebook &rarr;</button>
+              <button class="btn" onclick="onenoteDisconnect()">Disconnect</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="onenote-step-notebooks" class="onenote-step" style="display:none;">
+          <div class="onenote-step-header">Step 2: Select a Notebook</div>
+          <div id="onenote-notebooks-list" style="margin:12px 0;max-height:300px;overflow-y:auto;"></div>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <button class="btn" onclick="onenoteBackToConnect()">&larr; Back</button>
+            <button class="btn btn-primary" id="onenote-next-step3-btn" onclick="onenoteLoadSections()" disabled>Next: Select Sections</button>
+          </div>
+        </div>
+
+        <div id="onenote-step-sections" class="onenote-step" style="display:none;">
+          <div class="onenote-step-header">Step 3: Select Sections to Import</div>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+            <label><input type="checkbox" id="onenote-select-all-sections" onchange="onenoteToggleAllSections()"> Select all</label>
+          </p>
+          <div id="onenote-sections-list" style="max-height:300px;overflow-y:auto;"></div>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <button class="btn" onclick="onenoteBackToNotebooks()">&larr; Back</button>
+            <button class="btn btn-primary" id="onenote-import-btn" onclick="onenoteStartImport()" disabled>Import Selected</button>
+          </div>
+        </div>
+
+        <div id="onenote-step-progress" class="onenote-step" style="display:none;">
+          <div class="onenote-step-header">Importing...</div>
+          <div id="onenote-progress-bar-wrap" style="background:var(--bg-tertiary);border-radius:6px;height:8px;margin:16px 0;overflow:hidden;">
+            <div id="onenote-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;"></div>
+          </div>
+          <div id="onenote-progress-text" style="font-size:13px;color:var(--text-muted);text-align:center;"></div>
+          <div id="onenote-import-done" style="display:none;">
+            <div class="modal-status success" id="onenote-import-result"></div>
+            <button class="btn btn-primary" onclick="closeOneNoteModal()" style="margin-top:12px;">Done</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- .onepkg upload tab -->
+      <div id="onenote-tab-onepkg" style="display:none;">
+        <div class="onenote-step-header">Upload .onepkg File</div>
+        <p style="font-size:13px;color:var(--text-muted);margin:8px 0 16px;">
+          OneNote Package files (.onepkg) contain entire notebooks or sections. Select a file to import.
+        </p>
+        <div class="drop-zone" id="onepkg-drop-zone">
+          <p>Drop a <code>.onepkg</code> file here</p>
+          <p class="hint">or click to browse</p>
+        </div>
+        <input type="file" id="onepkg-file-input" accept=".onepkg" style="display:none" />
+        <div id="onepkg-upload-status" style="margin-top:8px;"></div>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+          <button class="btn btn-primary" id="onepkg-import-btn" onclick="onenoteImportOnepkg()" disabled>Import</button>
+        </div>
+        <div id="onepkg-progress" style="display:none;margin-top:12px;">
+          <div style="background:var(--bg-tertiary);border-radius:6px;height:8px;margin:8px 0;overflow:hidden;">
+            <div id="onepkg-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;"></div>
+          </div>
+          <div id="onepkg-progress-text" style="font-size:13px;color:var(--text-muted);text-align:center;"></div>
+          <div id="onepkg-import-done" style="display:none;">
+            <div class="modal-status success" id="onepkg-import-result"></div>
+            <button class="btn btn-primary" onclick="closeOneNoteModal()" style="margin-top:12px;">Done</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -3821,6 +3941,344 @@ function initClusterDivider() {
       divider.classList.remove('active');
     }
   });
+}
+
+// ── OneNote Import ────────────────────────────────────────────────────────────
+var onenoteState = {
+  notebooks: [],
+  selectedNotebookId: null,
+  selectedNotebookName: '',
+  sections: [],
+  importPoll: null,
+};
+
+function showOneNoteImport() {
+  var modal = document.getElementById('onenote-modal');
+  modal.classList.add('open');
+  setOneNoteStatus('');
+  document.getElementById('onenote-step-connect').style.display = '';
+  document.getElementById('onenote-step-notebooks').style.display = 'none';
+  document.getElementById('onenote-step-sections').style.display = 'none';
+  document.getElementById('onenote-step-progress').style.display = 'none';
+  document.getElementById('onenote-tab-online').style.display = '';
+  document.getElementById('onenote-tab-onepkg').style.display = 'none';
+  onenoteState.selectedNotebookId = null;
+  onenoteState.selectedNotebookName = '';
+  onenoteState.sections = [];
+  checkOneNoteAuth();
+}
+
+function closeOneNoteModal() {
+  document.getElementById('onenote-modal').classList.remove('open');
+  if (onenoteState.importPoll) {
+    clearInterval(onenoteState.importPoll);
+    onenoteState.importPoll = null;
+  }
+}
+
+function switchOneNoteTab(tab) {
+  document.querySelectorAll('[data-onenote-tab]').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelector('[data-onenote-tab="' + tab + '"]').classList.add('active');
+  document.getElementById('onenote-tab-online').style.display = tab === 'online' ? '' : 'none';
+  document.getElementById('onenote-tab-onepkg').style.display = tab === 'onepkg' ? '' : 'none';
+}
+
+function setOneNoteStatus(msg, type) {
+  var el = document.getElementById('onenote-status');
+  if (!msg) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="modal-status ' + (type || 'info') + '">' + esc(msg) + '</div>';
+}
+
+function checkOneNoteAuth() {
+  fetch('/api/onenote/auth/status')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.authenticated) {
+        document.getElementById('onenote-connect-btn').style.display = 'none';
+        document.getElementById('onenote-user-info').style.display = '';
+        document.getElementById('onenote-user-name').textContent = data.user || 'Connected';
+        document.getElementById('onenote-user-email').textContent = data.email || '';
+      } else {
+        document.getElementById('onenote-connect-btn').style.display = '';
+        document.getElementById('onenote-user-info').style.display = 'none';
+      }
+    })
+    .catch(function(e) {
+      setOneNoteStatus('Failed to check auth: ' + e.message, 'error');
+    });
+}
+
+function onenoteConnect() {
+  setOneNoteStatus('Redirecting to Microsoft sign-in...', 'info');
+  fetch('/api/onenote/auth')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.auth_url) {
+        window.open(data.auth_url, '_blank', 'width=600,height=700');
+        var pollTimer = setInterval(function() {
+          fetch('/api/onenote/auth/status')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+              if (d.authenticated) {
+                clearInterval(pollTimer);
+                checkOneNoteAuth();
+                setOneNoteStatus('Connected successfully!', 'success');
+              }
+            })
+            .catch(function() {});
+        }, 2000);
+        setTimeout(function() { clearInterval(pollTimer); }, 120000);
+      } else {
+        setOneNoteStatus('Failed to get auth URL', 'error');
+      }
+    })
+    .catch(function(e) {
+      setOneNoteStatus('Error: ' + e.message, 'error');
+    });
+}
+
+function onenoteDisconnect() {
+  fetch('/api/onenote/auth/logout', { method: 'POST' })
+    .then(function() {
+      checkOneNoteAuth();
+      setOneNoteStatus('Disconnected.', 'info');
+    })
+    .catch(function(e) {
+      setOneNoteStatus('Error: ' + e.message, 'error');
+    });
+}
+
+function onenoteLoadNotebooks() {
+  setOneNoteStatus('Loading notebooks...', 'info');
+  document.getElementById('onenote-step-connect').style.display = 'none';
+  document.getElementById('onenote-step-notebooks').style.display = '';
+  var list = document.getElementById('onenote-notebooks-list');
+  list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Loading...</div>';
+  fetch('/api/onenote/notebooks')
+    .then(function(r) {
+      if (r.status === 401) throw new Error('Not authenticated');
+      return r.json();
+    })
+    .then(function(notebooks) {
+      onenoteState.notebooks = notebooks;
+      if (!notebooks || notebooks.length === 0) {
+        list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">No notebooks found.</div>';
+        return;
+      }
+      list.innerHTML = '';
+      notebooks.forEach(function(nb) {
+        var div = document.createElement('div');
+        div.className = 'onenote-item';
+        div.dataset.id = nb.id;
+        div.onclick = function() { onenoteSelectNotebook(nb.id, nb.displayName, div); };
+        var name = esc(nb.displayName || 'Untitled');
+        var detail = (nb.sectionsUrl ? 'Sections available' : '');
+        div.innerHTML = '<div><strong>' + name + '</strong></div>' + (detail ? '<div class="onenote-item-detail">' + detail + '</div>' : '');
+        list.appendChild(div);
+      });
+      setOneNoteStatus('');
+    })
+    .catch(function(e) {
+      list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--red);font-size:13px;">' + esc(e.message) + '</div>';
+      setOneNoteStatus('Failed to load notebooks', 'error');
+    });
+}
+
+function onenoteSelectNotebook(id, name, el) {
+  onenoteState.selectedNotebookId = id;
+  onenoteState.selectedNotebookName = name;
+  document.querySelectorAll('#onenote-notebooks-list .onenote-item').forEach(function(i) { i.classList.remove('selected'); });
+  if (el) el.classList.add('selected');
+  document.getElementById('onenote-next-step3-btn').disabled = false;
+}
+
+function onenoteBackToConnect() {
+  document.getElementById('onenote-step-notebooks').style.display = 'none';
+  document.getElementById('onenote-step-connect').style.display = '';
+  document.getElementById('onenote-next-step3-btn').disabled = true;
+}
+
+function onenoteLoadSections() {
+  if (!onenoteState.selectedNotebookId) {
+    setOneNoteStatus('Select a notebook first.', 'error');
+    return;
+  }
+  setOneNoteStatus('Loading sections...', 'info');
+  document.getElementById('onenote-step-notebooks').style.display = 'none';
+  document.getElementById('onenote-step-sections').style.display = '';
+  var list = document.getElementById('onenote-sections-list');
+  list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Loading...</div>';
+  fetch('/api/onenote/notebooks/' + encodeURIComponent(onenoteState.selectedNotebookId) + '/sections')
+    .then(function(r) { return r.json(); })
+    .then(function(sections) {
+      onenoteState.sections = sections || [];
+      if (!sections || sections.length === 0) {
+        list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">No sections found in this notebook.</div>';
+        return;
+      }
+      list.innerHTML = '';
+      sections.forEach(function(sec) {
+        var div = document.createElement('div');
+        div.className = 'onenote-item';
+        var name = esc(sec.displayName || 'Untitled Section');
+        div.innerHTML = '<label><input type="checkbox" class="onenote-section-cb" data-id="' + esc(sec.id) + '" data-name="' + esc(name) + '" onchange="onenoteUpdateImportBtn()"> ' + name + '</label>';
+        list.appendChild(div);
+      });
+      document.getElementById('onenote-import-btn').disabled = true;
+      setOneNoteStatus('');
+    })
+    .catch(function(e) {
+      list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--red);font-size:13px;">' + esc(e.message) + '</div>';
+      setOneNoteStatus('Failed to load sections', 'error');
+    });
+}
+
+function onenoteBackToNotebooks() {
+  document.getElementById('onenote-step-sections').style.display = 'none';
+  document.getElementById('onenote-step-notebooks').style.display = '';
+}
+
+function onenoteToggleAllSections() {
+  var checked = document.getElementById('onenote-select-all-sections').checked;
+  document.querySelectorAll('.onenote-section-cb').forEach(function(cb) { cb.checked = checked; });
+  onenoteUpdateImportBtn();
+}
+
+function onenoteUpdateImportBtn() {
+  var checked = document.querySelectorAll('.onenote-section-cb:checked').length;
+  document.getElementById('onenote-import-btn').disabled = checked === 0;
+}
+
+function onenoteStartImport() {
+  var checked = document.querySelectorAll('.onenote-section-cb:checked');
+  if (checked.length === 0) { setOneNoteStatus('Select at least one section.', 'error'); return; }
+  var sectionIds = [];
+  checked.forEach(function(cb) { sectionIds.push(cb.dataset.id); });
+
+  document.getElementById('onenote-step-sections').style.display = 'none';
+  document.getElementById('onenote-step-progress').style.display = '';
+  document.getElementById('onenote-import-done').style.display = 'none';
+  document.getElementById('onenote-progress-bar').style.width = '0%';
+  document.getElementById('onenote-progress-text').textContent = 'Starting import...';
+  setOneNoteStatus('');
+
+  fetch('/api/onenote/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ section_ids: sectionIds }),
+  }).then(function(r) { return r.json(); }).then(function(result) {
+    if (result.status === 'done') {
+      onenotePollImport();
+    } else {
+      document.getElementById('onenote-progress-text').textContent = 'Import failed';
+      setOneNoteStatus(result.error || 'Import failed', 'error');
+    }
+  }).catch(function(e) {
+    document.getElementById('onenote-progress-text').textContent = 'Import failed';
+    setOneNoteStatus('Error: ' + e.message, 'error');
+  });
+}
+
+function onenotePollImport() {
+  var attempts = 0;
+  onenoteState.importPoll = setInterval(function() {
+    attempts++;
+    fetch('/api/onenote/import/status')
+      .then(function(r) { return r.json(); })
+      .then(function(prog) {
+        if (prog.status === 'done' || prog.status === 'idle') {
+          clearInterval(onenoteState.importPoll);
+          onenoteState.importPoll = null;
+          document.getElementById('onenote-progress-bar').style.width = '100%';
+          var msg = 'Imported ' + (prog.imported || 0) + ' pages from ' + (prog.total || 0) + ' total.';
+          document.getElementById('onenote-import-result').textContent = msg;
+          document.getElementById('onenote-import-done').style.display = '';
+          document.getElementById('onenote-progress-text').textContent = msg;
+          setOneNoteStatus('');
+          // Trigger graph rebuild
+          fetch('/api/graph').then(function(r) { return r.json(); }).then(function(d) {
+            if (d && d.nodes) { graphData = d; render(); }
+          }).catch(function() {});
+        } else {
+          var pct = prog.total > 0 ? Math.round((prog.completed || 0) / prog.total * 100) : 0;
+          document.getElementById('onenote-progress-bar').style.width = Math.min(pct, 100) + '%';
+          document.getElementById('onenote-progress-text').textContent = prog.current || (prog.completed + '/' + prog.total);
+        }
+      })
+      .catch(function() {});
+    if (attempts > 600) { clearInterval(onenoteState.importPoll); onenoteState.importPoll = null; }
+  }, 1000);
+}
+
+// ── .onepkg Import ────────────────────────────────────────────────────────────
+var onepkgFile = null;
+
+(function() {
+  var dropZone = document.getElementById('onepkg-drop-zone');
+  var fileInput = document.getElementById('onepkg-file-input');
+  if (dropZone && fileInput) {
+    dropZone.addEventListener('click', function() { fileInput.click(); });
+    dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('dragover'); });
+    dropZone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleOnepkgFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', function(e) {
+      if (e.target.files.length) handleOnepkgFile(e.target.files[0]);
+    });
+  }
+})();
+
+function handleOnepkgFile(file) {
+  if (!file.name.toLowerCase().endsWith('.onepkg')) {
+    document.getElementById('onepkg-upload-status').innerHTML = '<div class="modal-status error">Please select a .onepkg file.</div>';
+    return;
+  }
+  onepkgFile = file;
+  document.getElementById('onepkg-upload-status').innerHTML = '<div class="modal-status info">Selected: ' + esc(file.name) + ' (' + (file.size / 1024).toFixed(1) + ' KB)</div>';
+  document.getElementById('onepkg-import-btn').disabled = false;
+}
+
+function onenoteImportOnepkg() {
+  if (!onepkgFile) {
+    document.getElementById('onepkg-upload-status').innerHTML = '<div class="modal-status error">Select a .onepkg file first.</div>';
+    return;
+  }
+  var btn = document.getElementById('onepkg-import-btn');
+  btn.disabled = true;
+  btn.textContent = 'Importing...';
+  document.getElementById('onepkg-progress').style.display = '';
+  document.getElementById('onepkg-import-done').style.display = 'none';
+  document.getElementById('onepkg-progress-bar').style.width = '0%';
+  document.getElementById('onepkg-progress-text').textContent = 'Processing...';
+
+  var form = new FormData();
+  form.append('file', onepkgFile);
+
+  fetch('/api/onenote/import/onepkg', { method: 'POST', body: form })
+    .then(function(r) { return r.json(); })
+    .then(function(result) {
+      document.getElementById('onepkg-progress-bar').style.width = '100%';
+      btn.style.display = 'none';
+      var imported = result.imported || 0;
+      var total = result.total || 0;
+      var msg = 'Imported ' + imported + ' notes from .onepkg' + (result.error ? '. ' + result.error : '');
+      document.getElementById('onepkg-import-result').textContent = msg;
+      document.getElementById('onepkg-import-done').style.display = '';
+      document.getElementById('onepkg-progress-text').textContent = msg;
+
+      fetch('/api/graph').then(function(r) { return r.json(); }).then(function(d) {
+        if (d && d.nodes) { graphData = d; render(); }
+      }).catch(function() {});
+    })
+    .catch(function(e) {
+      document.getElementById('onepkg-progress-text').textContent = 'Import failed';
+      document.getElementById('onepkg-upload-status').innerHTML = '<div class="modal-status error">' + esc(e.message) + '</div>';
+      btn.disabled = false;
+      btn.textContent = 'Import';
+    });
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
